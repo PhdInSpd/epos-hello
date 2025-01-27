@@ -5,7 +5,6 @@
 // Copyright   : maxon motor ag 2014-2021
 // Description : Hello Epos in C++
 //============================================================================
-//#pragma warning(disable : 4996)
 #include <iostream>
 #include "Definitions.h"
 #include <string.h>
@@ -70,6 +69,16 @@ void  SetDefaultParameters();
 int   ParseArguments(int argc, char** argv);
 int   DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD& p_rlErrorCode);
 bool  targetReached(HANDLE deviceHandle, unsigned short nodeId) {
+	DWORD errorCode = 0;
+	BOOL targetReached = FALSE;
+	bool success = VCS_GetMovementState(deviceHandle, nodeId, &targetReached, &errorCode);
+	if (!success)
+	{
+		throw errorCode;
+	}
+	return targetReached;
+}
+bool  getCommandPositio(HANDLE deviceHandle, unsigned short nodeId) {
 	DWORD errorCode = 0;
 	BOOL targetReached = FALSE;
 	bool success = VCS_GetMovementState(deviceHandle, nodeId, &targetReached, &errorCode);
