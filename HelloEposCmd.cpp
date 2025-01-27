@@ -67,30 +67,20 @@ int   CloseDevice(DWORD* p_pErrorCode);
 void  SetDefaultParameters();
 int   ParseArguments(int argc, char** argv);
 int   DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD& p_rlErrorCode);
-bool  targetReached(HANDLE deviceHandle, unsigned short nodeId) {
-	DWORD errorCode = 0;
-	BOOL targetReached = FALSE;
-	bool success = VCS_GetMovementState(deviceHandle, nodeId, &targetReached, &errorCode);
-	if (!success)
-	{
-		throw errorCode;
-	}
-	return targetReached;
-}
-/****************************************************************************/
-/*	jodo add																*/
-bool  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId);
-
-/****************************************************************************/
 
 int   Demo(DWORD* p_pErrorCode);
-int   PrepareDemo(DWORD* p_pErrorCode);
+int   PrepareDemo(DWORD* p_pErrorCode, WORD nodeId);
 int   PrintAvailableInterfaces();
 int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
 int	  PrintAvailableProtocols();
 int   PrintDeviceVersion();
 
-bool  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId) {
+/****************************************************************************/
+/*	jodo add																*/
+bool  getTargetReached(HANDLE deviceHandle, unsigned short nodeId);
+long  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId);
+
+bool  getTargetReached(HANDLE deviceHandle, unsigned short nodeId) {
 	DWORD errorCode = 0;
 	BOOL targetReached = FALSE;
 	bool success = VCS_GetMovementState(deviceHandle, nodeId, &targetReached, &errorCode);
@@ -100,6 +90,141 @@ bool  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId) {
 	}
 	return targetReached;
 }
+
+long  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId) {
+	DWORD errorCode = 0;
+	int cmdPos = 0;
+	DWORD NbOfBytesRead = 0;
+	bool success = VCS_GetObject(deviceHandle,
+		nodeId,
+		0x6062,
+		0x00,
+		&cmdPos,
+		4,
+		&NbOfBytesRead,
+		&errorCode);
+	if (!success)
+	{
+		throw errorCode;
+	}
+	return cmdPos;
+}
+
+void disableDrives(DWORD* pErrorCode) {
+	for (WORD i = 0; i < NUM_AXES; i++)
+	{
+		if (!VCS_SetDisableState(g_pKeyHandle, g_usNodeId + i, pErrorCode))
+		{
+			LogError("VCS_SetDisableState", false, *pErrorCode);
+		}
+	}
+}
+
+void enableDrives(DWORD* pErrorCode) {
+	for (WORD i = 0; i < NUM_AXES; i++)
+	{
+		if (!VCS_SetEnableState(g_pKeyHandle, g_usNodeId + i, pErrorCode))
+		{
+			LogError("VCS_SetEnableState", false, *pErrorCode);
+		}
+	}
+}
+
+void haltPositionMovementDrives(DWORD* pErrorCode) {
+	for (size_t i = 0; i < NUM_AXES; i++)
+	{
+		if (!VCS_HaltPositionMovement(g_pKeyHandle, g_usNodeId + i, pErrorCode))
+		{
+			LogError("VCS_HaltPositionMovement", false, *pErrorCode);
+		}
+	}
+}
+
+
+int jodoDemoProfilePositionMode(HANDLE pDeviceHandle, unsigned short nodeId, DWORD& rErrorCode) {
+	int lResult = MMC_SUCCESS;
+
+	std::stringstream msg;
+	msg << "set profile position mode, node = " << nodeId;
+	LogInfo(msg.str());
+
+	for (size_t i = 0; i < NUM_AXES; i++)
+	{
+		if (!VCS_ActivateProfilePositionMode(pDeviceHandle, nodeId + i, &rErrorCode))
+		{
+			LogError("VCS_ActivateProfilePositionMode", lResult, rErrorCode);
+			lResult = MMC_FAILED;
+			return lResult;
+		}
+	}
+
+	std::list<long> positionList;
+	positionList.push_back(50000);
+	positionList.push_back(-100000);
+	positionList.push_back(50000);
+	positionList.push_back(-100006);
+	for (size_t i = 0; i < NUM_AXES; i++)
+	{
+		for (std::list<long>::iterator it = positionList.begin(); it != positionList.end(); it++) {
+			long targetPosition = (*it);
+			std::stringstream msg;
+			msg << "move to position = " << targetPosition << ", node = " << nodeId + i;
+			LogInfo(msg.str());
+
+			bool immediate = true;
+			bool absolute = true;
+			if (VCS_MoveToPosition(pDeviceHandle, nodeId + i, targetPosition, absolute, immediate, &rErrorCode) == 0)
+			{
+				LogError("VCS_MoveToPosition", lResult, rErrorCode);
+				lResult = MMC_FAILED;
+				break;
+			}
+
+			while (!getTargetReached(pDeviceHandle, nodeId + i))
+			{
+				long cmdPos = getCommandPosition(pDeviceHandle, nodeId + i);
+				std::stringstream msg;
+				msg << "cmd position = " << cmdPos << ", node = " << nodeId + i;
+				LogInfo(msg.str());
+				Sleep(1);
+			}
+
+			long finalPos = 0;
+			if (VCS_GetPositionIs(pDeviceHandle, nodeId + i, &finalPos, &rErrorCode)) {
+				std::stringstream msg;
+				msg << "final position = " << finalPos << ", node = " << nodeId;
+				LogInfo(msg.str());
+			}
+
+			Sleep(1);
+		}
+
+		if (lResult != MMC_SUCCESS)
+		{
+			return lResult;
+		}
+	}
+
+
+	return lResult;
+}
+
+int jodoDemo(DWORD* pErrorCode)
+{
+	int lResult = jodoDemoProfilePositionMode(g_pKeyHandle, g_usNodeId, *pErrorCode);
+	if (lResult != MMC_SUCCESS)
+	{
+		LogError("jodoDemoProfilePositionMode", lResult, *pErrorCode);
+		return lResult;
+	}
+	LogInfo("halt position movement");
+	haltPositionMovementDrives(pErrorCode);
+	disableDrives(pErrorCode);
+	return lResult;
+}
+
+/****************************************************************************/
+
 
 void PrintUsage()
 {
@@ -323,8 +448,15 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 				break;
 			}
 
-			while (!targetReached(p_DeviceHandle, p_usNodeId))
+			while (!getTargetReached(p_DeviceHandle, p_usNodeId))
 			{
+				
+				//if (VCS_GetPositionMust(p_DeviceHandle, p_usNodeId, &cmdPos, &p_rlErrorCode)) {
+				//if (VCS_GetTargetPosition(p_DeviceHandle, p_usNodeId, &cmdPos, &p_rlErrorCode)) {
+				long cmdPos = getCommandPosition(p_DeviceHandle, p_usNodeId);
+				std::stringstream msg;
+				msg << "cmd position = " << cmdPos << ", node = " << p_usNodeId;
+				LogInfo(msg.str());
 				Sleep(1);
 			}
 
@@ -334,6 +466,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 				msg << "final position = " << finalPos << ", node = " << p_usNodeId;
 				LogInfo(msg.str());
 			}
+
 
 			Sleep(1);
 		}
@@ -408,60 +541,52 @@ bool DemoProfileVelocityMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, D
 	return lResult;
 }
 
-int PrepareDemo(DWORD* p_pErrorCode)
+int PrepareDemo(DWORD* pErrorCode, WORD nodeId)
 {
 	int lResult = MMC_SUCCESS;
 	BOOL oIsFault = 0;
 
-	if(VCS_GetFaultState(g_pKeyHandle, g_usNodeId, &oIsFault, p_pErrorCode ) == 0)
+	if(!VCS_GetFaultState(g_pKeyHandle, nodeId, &oIsFault, pErrorCode ) )
 	{
-		LogError("VCS_GetFaultState", lResult, *p_pErrorCode);
+		LogError("VCS_GetFaultState", lResult, *pErrorCode);
 		lResult = MMC_FAILED;
+		return lResult;
 	}
 
-	if(lResult==0)
+	if(oIsFault)
 	{
-		if(oIsFault)
-		{
-			std::stringstream msg;
-			msg << "clear fault, node = '" << g_usNodeId << "'";
-			LogInfo(msg.str());
+		std::stringstream msg;
+		msg << "clear fault, node = '" << nodeId << "'";
+		LogInfo(msg.str());
 
-			if(VCS_ClearFault(g_pKeyHandle, g_usNodeId, p_pErrorCode) == 0)
-			{
-				LogError("VCS_ClearFault", lResult, *p_pErrorCode);
-				lResult = MMC_FAILED;
-			}
+		if(!VCS_ClearFault(g_pKeyHandle, nodeId, pErrorCode) )
+		{
+			LogError("VCS_ClearFault", lResult, *pErrorCode);
+			lResult = MMC_FAILED;
+			return lResult;
 		}
+	}
 
-		if(lResult==0)
+	BOOL oIsEnabled = 0;
+	if(!VCS_GetEnableState(g_pKeyHandle, nodeId, &oIsEnabled, pErrorCode) )
+	{
+		LogError("VCS_GetEnableState", lResult, *pErrorCode);
+		lResult = MMC_FAILED;
+		return lResult;
+	}
+
+	if(!oIsEnabled)
+	{
+		if(VCS_SetEnableState(g_pKeyHandle, nodeId, pErrorCode) == 0)
 		{
-			BOOL oIsEnabled = 0;
-
-			if(VCS_GetEnableState(g_pKeyHandle, g_usNodeId, &oIsEnabled, p_pErrorCode) == 0)
-			{
-				LogError("VCS_GetEnableState", lResult, *p_pErrorCode);
-				lResult = MMC_FAILED;
-			}
-
-			if(lResult==0)
-			{
-				if(!oIsEnabled)
-				{
-					if(VCS_SetEnableState(g_pKeyHandle, g_usNodeId, p_pErrorCode) == 0)
-					{
-						LogError("VCS_SetEnableState", lResult, *p_pErrorCode);
-						lResult = MMC_FAILED;
-					}
-				}
-			}
+			LogError("VCS_SetEnableState", lResult, *pErrorCode);
+			lResult = MMC_FAILED;
 		}
 	}
 	return lResult;
 }
 
-int MaxFollowingErrorDemo(DWORD& p_rlErrorCode)
-{
+int MaxFollowingErrorDemo(DWORD& p_rlErrorCode) {
 	int lResult = MMC_SUCCESS;
 	const unsigned int EXPECTED_ERROR_CODE = 0x8611;
 	DWORD lDeviceErrorCode = 0;
@@ -491,33 +616,28 @@ int MaxFollowingErrorDemo(DWORD& p_rlErrorCode)
 	return lResult;
 }
 
-int Demo(DWORD* p_pErrorCode)
+int Demo(DWORD* pErrorCode)
 {
 	int lResult = MMC_SUCCESS;
-	DWORD lErrorCode = 0;
 
-	lResult = DemoProfileVelocityMode(g_pKeyHandle, g_usNodeId, lErrorCode);
-
+	lResult = DemoProfileVelocityMode(g_pKeyHandle, g_usNodeId, *pErrorCode);
 	if(lResult != MMC_SUCCESS)
 	{
-		LogError("DemoProfileVelocityMode", lResult, lErrorCode);
+		LogError("DemoProfileVelocityMode", lResult, *pErrorCode);
+		return lResult;
 	}
-	else
-	{
-		lResult = DemoProfilePositionMode(g_pKeyHandle, g_usNodeId, lErrorCode);
 
-		if(lResult != MMC_SUCCESS)
-		{
-			LogError("DemoProfilePositionMode", lResult, lErrorCode);
-		}
-		else
-		{
-			if(VCS_SetDisableState(g_pKeyHandle, g_usNodeId, &lErrorCode) == 0)
-			{
-				LogError("VCS_SetDisableState", lResult, lErrorCode);
-				lResult = MMC_FAILED;
-			}
-		}
+	lResult = DemoProfilePositionMode(g_pKeyHandle, g_usNodeId, *pErrorCode);
+	if(lResult != MMC_SUCCESS)
+	{
+		LogError("DemoProfilePositionMode", lResult, *pErrorCode);
+		return lResult;
+	}
+
+	if(VCS_SetDisableState(g_pKeyHandle, g_usNodeId, pErrorCode) == 0)
+	{
+		LogError("VCS_SetDisableState", lResult, *pErrorCode);
+		lResult = MMC_FAILED;
 	}
 
 	return lResult;
@@ -673,21 +793,23 @@ int main(int argc, char** argv)
 	{
 		case AM_DEMO:
 		{
-			if((lResult = OpenDevice(&ulErrorCode))!=MMC_SUCCESS)
-			{
+			if((lResult = OpenDevice(&ulErrorCode))!=MMC_SUCCESS) {
 				LogError("OpenDevice", lResult, ulErrorCode);
 				return lResult;
 			}
 
-			if((lResult = PrepareDemo(&ulErrorCode))!=MMC_SUCCESS)
+			for (size_t i = 0; i < NUM_AXES; i++)
 			{
-				LogError("PrepareDemo", lResult, ulErrorCode);
-				return lResult;
+				if ((lResult = PrepareDemo(&ulErrorCode, g_usNodeId+i)) != MMC_SUCCESS) {
+					LogError("PrepareDemo", lResult, ulErrorCode);
+					return lResult;
+				}
 			}
+			
 
-			if((lResult = Demo(&ulErrorCode))!=MMC_SUCCESS)
+			if((lResult = jodoDemo(&ulErrorCode))!=MMC_SUCCESS)
 			{
-				LogError("Demo", lResult, ulErrorCode);
+				LogError("jodoDemo", lResult, ulErrorCode);
 				return lResult;
 			}
 
