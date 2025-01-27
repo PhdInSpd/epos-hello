@@ -33,18 +33,17 @@ enum EAppMode
 	AM_VERSION_INFO
 };
 
-using namespace std;
-
+const int NUM_AXES = 2;
 void* g_pKeyHandle = 0;
-unsigned short g_usNodeId = 2;
-string g_deviceName;
-string g_protocolStackName;
-string g_interfaceName;
-string g_portName;
+unsigned short g_usNodeId;
+std::string g_deviceName;
+std::string g_protocolStackName;
+std::string g_interfaceName;
+std::string g_portName;
 int g_baudrate = 0;
 EAppMode g_eAppMode = AM_DEMO;
 
-const string g_programName = "HelloEposCmd";
+const std::string g_programName = "HelloEposCmd";
 
 #ifndef MMC_SUCCESS
 	#define MMC_SUCCESS 0
@@ -58,8 +57,8 @@ const string g_programName = "HelloEposCmd";
 	#define MMC_MAX_LOG_MSG_SIZE 512
 #endif
 
-void  LogError(string functionName, int p_lResult, unsigned int p_ulErrorCode);
-void  LogInfo(string message);
+void  LogError(std::string functionName, int p_lResult, unsigned int p_ulErrorCode);
+void  LogInfo(std::string message);
 void  PrintUsage();
 void  PrintHeader();
 void  PrintSettings();
@@ -78,7 +77,20 @@ bool  targetReached(HANDLE deviceHandle, unsigned short nodeId) {
 	}
 	return targetReached;
 }
-bool  getCommandPositio(HANDLE deviceHandle, unsigned short nodeId) {
+/****************************************************************************/
+/*	jodo add																*/
+bool  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId);
+
+/****************************************************************************/
+
+int   Demo(DWORD* p_pErrorCode);
+int   PrepareDemo(DWORD* p_pErrorCode);
+int   PrintAvailableInterfaces();
+int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
+int	  PrintAvailableProtocols();
+int   PrintDeviceVersion();
+
+bool  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId) {
 	DWORD errorCode = 0;
 	BOOL targetReached = FALSE;
 	bool success = VCS_GetMovementState(deviceHandle, nodeId, &targetReached, &errorCode);
@@ -88,36 +100,30 @@ bool  getCommandPositio(HANDLE deviceHandle, unsigned short nodeId) {
 	}
 	return targetReached;
 }
-int   Demo(DWORD* p_pErrorCode);
-int   PrepareDemo(DWORD* p_pErrorCode);
-int   PrintAvailableInterfaces();
-int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
-int	  PrintAvailableProtocols();
-int   PrintDeviceVersion();
 
 void PrintUsage()
 {
-	cout << "Usage: HelloEposCmd" << endl;
-	cout << "\t-h : this help" << endl;
-	cout << "\t-n : node id (default 1)" << endl;
-	cout << "\t-d   : device name (EPOS2, EPOS4, default - EPOS4)"  << endl;
-	cout << "\t-s   : protocol stack name (MAXON_RS232, CANopen, MAXON SERIAL V2, default - MAXON SERIAL V2)"  << endl;
-	cout << "\t-i   : interface name (RS232, USB, CAN_ixx_usb 0, CAN_kvaser_usb 0,... default - USB)"  << endl;
-	cout << "\t-p   : port name (COM1, USB0, CAN0,... default - USB0)" << endl;
-	cout << "\t-b   : baudrate (115200, 1000000,... default - 1000000)" << endl;
-	cout << "\t-l   : list available interfaces (valid device name and protocol stack required)" << endl;
-	cout << "\t-r   : list supported protocols (valid device name required)" << endl;
-	cout << "\t-v   : display device version" << endl;
+	std::cout << "Usage: HelloEposCmd" << std::endl;
+	std::cout << "\t-h : this help" << std::endl;
+	std::cout << "\t-n : node id (default 1)" << std::endl;
+	std::cout << "\t-d   : device name (EPOS2, EPOS4, default - EPOS4)"  << std::endl;
+	std::cout << "\t-s   : protocol stack name (MAXON_RS232, CANopen, MAXON SERIAL V2, default - MAXON SERIAL V2)"  << std::endl;
+	std::cout << "\t-i   : interface name (RS232, USB, CAN_ixx_usb 0, CAN_kvaser_usb 0,... default - USB)"  << std::endl;
+	std::cout << "\t-p   : port name (COM1, USB0, CAN0,... default - USB0)" << std::endl;
+	std::cout << "\t-b   : baudrate (115200, 1000000,... default - 1000000)" << std::endl;
+	std::cout << "\t-l   : list available interfaces (valid device name and protocol stack required)" << std::endl;
+	std::cout << "\t-r   : list supported protocols (valid device name required)" << std::endl;
+	std::cout << "\t-v   : display device version" << std::endl;
 }
 
-void LogError(string functionName, int p_lResult, unsigned int p_ulErrorCode)
+void LogError(std::string functionName, int p_lResult, unsigned int p_ulErrorCode)
 {
-	cerr << g_programName << ": " << functionName << " failed (result=" << p_lResult << ", errorCode=0x" << std::hex << p_ulErrorCode << ")"<< endl;
+	std::cerr << g_programName << ": " << functionName << " failed (result=" << p_lResult << ", errorCode=0x" << std::hex << p_ulErrorCode << ")"<< std::endl;
 }
 
-void LogInfo(string message)
+void LogInfo(std::string message)
 {
-	cout << message << endl;
+	std::cout << message << std::endl;
 }
 
 void SeparatorLine()
@@ -125,21 +131,21 @@ void SeparatorLine()
 	const int lineLength = 65;
 	for(int i=0; i<lineLength; i++)
 	{
-		cout << "-";
+		std::cout << "-";
 	}
-	cout << endl;
+	std::cout << std::endl;
 }
 
 void PrintSettings()
 {
-	stringstream msg;
+	std::stringstream msg;
 
-	msg << "default settings:" << endl;
-	msg << "node id             = " << g_usNodeId << endl;
-	msg << "device name         = '" << g_deviceName << "'" << endl;
-	msg << "protocal stack name = '" << g_protocolStackName << "'" << endl;
-	msg << "interface name      = '" << g_interfaceName << "'" << endl;
-	msg << "port name           = '" << g_portName << "'"<< endl;
+	msg << "default settings:" << std::endl;
+	msg << "node id             = " << g_usNodeId << std::endl;
+	msg << "device name         = '" << g_deviceName << "'" << std::endl;
+	msg << "protocal stack name = '" << g_protocolStackName << "'" << std::endl;
+	msg << "interface name      = '" << g_interfaceName << "'" << std::endl;
+	msg << "port name           = '" << g_portName << "'"<< std::endl;
 	msg << "baudrate            = " << g_baudrate;
 
 	LogInfo(msg.str());
@@ -267,7 +273,7 @@ int ParseArguments(int argc, char** argv)
 				g_eAppMode = AM_VERSION_INFO;
 				break;
 			case '?':  // unknown option...
-				stringstream msg;
+				std::stringstream msg;
 				msg << "Unknown option: '" << char(optopt) << "'!";
 				LogInfo(msg.str());
 				PrintUsage();
@@ -282,7 +288,7 @@ int ParseArguments(int argc, char** argv)
 int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD & p_rlErrorCode)
 {
 	int lResult = MMC_SUCCESS;
-	stringstream msg;
+	std::stringstream msg;
 
 	msg << "set profile position mode, node = " << p_usNodeId;
 	LogInfo(msg.str());
@@ -294,17 +300,17 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 	}
 	else
 	{
-		list<long> positionList;
+		std::list<long> positionList;
 
 		positionList.push_back(  50000);
 		positionList.push_back(-100000);
 		positionList.push_back(  50000);
 		positionList.push_back(-100006);
 
-		for(list<long>::iterator it = positionList.begin(); it !=positionList.end(); it++)
+		for(std::list<long>::iterator it = positionList.begin(); it !=positionList.end(); it++)
 		{
 			long targetPosition = (*it);
-			stringstream msg;
+			std::stringstream msg;
 			msg << "move to position = " << targetPosition << ", node = " << p_usNodeId;
 			LogInfo(msg.str());
 
@@ -324,7 +330,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 
 			long finalPos = 0;
 			if (VCS_GetPositionIs(p_DeviceHandle, p_usNodeId, &finalPos, &p_rlErrorCode) ) {
-				stringstream msg;
+				std::stringstream msg;
 				msg << "final position = " << finalPos << ", node = " << p_usNodeId;
 				LogInfo(msg.str());
 			}
@@ -350,7 +356,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 bool DemoProfileVelocityMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD & p_rlErrorCode)
 {
 	int lResult = MMC_SUCCESS;
-	stringstream msg;
+	std::stringstream msg;
 
 	msg << "set profile velocity mode, node = " << p_usNodeId;
 
@@ -363,17 +369,17 @@ bool DemoProfileVelocityMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, D
 	}
 	else
 	{
-		list<long> velocityList;
+		std::list<long> velocityList;
 
 		velocityList.push_back(100);
 		velocityList.push_back(500);
 		velocityList.push_back(1000);
 
-		for(list<long>::iterator it = velocityList.begin(); it !=velocityList.end(); it++)
+		for(std::list<long>::iterator it = velocityList.begin(); it !=velocityList.end(); it++)
 		{
 			long targetvelocity = (*it);
 
-			stringstream msg;
+			std::stringstream msg;
 			msg << "move with target velocity = " << targetvelocity << " rpm, node = " << p_usNodeId;
 			LogInfo(msg.str());
 
@@ -417,7 +423,7 @@ int PrepareDemo(DWORD* p_pErrorCode)
 	{
 		if(oIsFault)
 		{
-			stringstream msg;
+			std::stringstream msg;
 			msg << "clear fault, node = '" << g_usNodeId << "'";
 			LogInfo(msg.str());
 
