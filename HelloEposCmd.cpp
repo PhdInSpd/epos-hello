@@ -5,6 +5,7 @@
 // Copyright   : maxon motor ag 2014-2021
 // Description : Hello Epos in C++
 //============================================================================
+#include <chrono>
 #include <iostream>
 #include "Definitions.h"
 #include <string.h>
@@ -293,7 +294,6 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 			profileAcceleration[i]	= (double)(pathAcceleration	/ encRes[i] * unitDirection[i] * 1000);
 			profileDeceleration[i]	= (double)(pathAcceleration	/ encRes[i] * unitDirection[i] * 1000);
 		}
-		
 
 		//profileVelocity[1]		= (float)(pathVelocity / AXIS1_REV * unitDirection[1]	  * 1000);
 		//profileAcceleration[1]	= (float)(pathAcceleration / AXIS1_REV * unitDirection[1] * 1000);
@@ -331,15 +331,19 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 			success = false;
 			return success;
 		}
-
-		while( !( getTargetReached(pDeviceHandle, 1) && getTargetReached(pDeviceHandle, 2) ) )
+		do
 		{
+			// each getCommandPosition() takes 2.5 ms
+			auto start = std::chrono::high_resolution_clock::now();
 			long cmdPos[NUM_AXES] = { getCommandPosition(pDeviceHandle, 1), getCommandPosition(pDeviceHandle, 2) };
+			auto end = std::chrono::high_resolution_clock::now();
+			std::chrono::duration<double> elapsed = end - start;
+
 			std::stringstream msg;
-			msg << "cmd position = " << cmdPos[0] << "," << cmdPos[1];
+			msg << "cmd position = " << cmdPos[0] << "," << cmdPos[1] << " :" << elapsed.count();
 			LogInfo(msg.str());
 			sleep(1);
-		}
+		} while (!(getTargetReached(pDeviceHandle, 1) && getTargetReached(pDeviceHandle, 2)));
 
 		long finalPos[NUM_AXES] = { 0 };
 		if( VCS_GetPositionIs(pDeviceHandle, 1, &finalPos[0], &rErrorCode) && 
