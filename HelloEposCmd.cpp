@@ -18,8 +18,10 @@
 #include <sys/types.h>
 //#include <unistd.h>
 #include <stdio.h>
+#include <vector>
 //#include <sys/times.h>
 //#include <sys/time.h>
+#define sleep Sleep
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -110,36 +112,61 @@ long  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId) {
 	return cmdPos;
 }
 
-void disableDrives(DWORD* pErrorCode) {
-	for (WORD i = 0; i < NUM_AXES; i++)
-	{
-		if (!VCS_SetDisableState(g_pKeyHandle, g_usNodeId + i, pErrorCode))
-		{
-			LogError("VCS_SetDisableState", false, *pErrorCode);
+bool disableDrives(DWORD* pErrorCode) {
+	bool success = true;
+	for (WORD i = 0; i < NUM_AXES; i++) {
+		if (!VCS_SetDisableState(g_pKeyHandle, g_usNodeId + i, pErrorCode)) {
+			LogError(	"VCS_SetDisableState",
+						false,
+						*pErrorCode);
+			success = false;
 		}
 	}
+	return success;
 }
 
-void enableDrives(DWORD* pErrorCode) {
+bool enableDrives(DWORD* pErrorCode) {
+	bool success = true;
 	for (WORD i = 0; i < NUM_AXES; i++)
 	{
 		if (!VCS_SetEnableState(g_pKeyHandle, g_usNodeId + i, pErrorCode))
 		{
-			LogError("VCS_SetEnableState", false, *pErrorCode);
+			LogError(	"VCS_SetEnableState",
+						false,
+						*pErrorCode);
+			success = false;
 		}
 	}
+	return success;
 }
 
-void haltPositionMovementDrives(DWORD* pErrorCode) {
+bool haltPositionMovementDrives(DWORD* pErrorCode) {
+	bool success = true;
 	for (size_t i = 0; i < NUM_AXES; i++)
 	{
 		if (!VCS_HaltPositionMovement(g_pKeyHandle, g_usNodeId + i, pErrorCode))
 		{
-			LogError("VCS_HaltPositionMovement", false, *pErrorCode);
+			LogError(	"VCS_HaltPositionMovement",
+						false,
+						*pErrorCode);
+			success = false;
 		}
 	}
+	return success;
 }
 
+bool activateProfilePositionModeDrives(DWORD* pErrorCode) {
+	bool success = true;
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		if (!VCS_ActivateProfilePositionMode(g_pKeyHandle, g_usNodeId + i, pErrorCode)) {
+			LogError(	"VCS_HaltPositionMovement",
+						false,
+						*pErrorCode);
+			success = false;
+		}
+	}
+	return success;
+}
 
 int jodoDemoProfilePositionMode(HANDLE pDeviceHandle, unsigned short nodeId, DWORD& rErrorCode) {
 	int lResult = MMC_SUCCESS;
@@ -186,7 +213,7 @@ int jodoDemoProfilePositionMode(HANDLE pDeviceHandle, unsigned short nodeId, DWO
 				std::stringstream msg;
 				msg << "cmd position = " << cmdPos << ", node = " << nodeId + i;
 				LogInfo(msg.str());
-				Sleep(1);
+				sleep(1);
 			}
 
 			long finalPos = 0;
@@ -196,7 +223,7 @@ int jodoDemoProfilePositionMode(HANDLE pDeviceHandle, unsigned short nodeId, DWO
 				LogInfo(msg.str());
 			}
 
-			Sleep(1);
+			sleep(1);
 		}
 
 		if (lResult != MMC_SUCCESS)
@@ -204,9 +231,126 @@ int jodoDemoProfilePositionMode(HANDLE pDeviceHandle, unsigned short nodeId, DWO
 			return lResult;
 		}
 	}
-
-
 	return lResult;
+}
+
+bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
+	bool success = true;
+
+	std::stringstream msg;
+	msg << "set profile position mode";
+	LogInfo(msg.str());
+
+	if ( !(success=activateProfilePositionModeDrives(&rErrorCode)) )
+	{
+		return success;
+	}
+	// (COUNTS / min)
+	double pathVelocity		=    7500000;
+	// (counts / min) / sec
+	double pathAcceleration =     50000;
+	std::vector<long> pos[NUM_AXES];
+	const float AXIS0_REV = 2048 * 4;
+	pos[0].push_back(0.2f*  AXIS0_REV);
+	pos[0].push_back(0.5f * AXIS0_REV);
+	pos[0].push_back(0.7f * AXIS0_REV);
+	pos[0].push_back(1.0f * AXIS0_REV);
+	
+	const float AXIS1_REV = 1024 * 4 ;
+	const float GEAR_RATIO = 44;
+	pos[1].push_back(0.1f * AXIS1_REV);
+	pos[1].push_back(0.2f * AXIS1_REV*GEAR_RATIO);
+	pos[1].push_back(0.3f * AXIS1_REV*GEAR_RATIO);
+	pos[1].push_back(0.4f * AXIS1_REV*GEAR_RATIO);
+	double unitDirection[NUM_AXES] = { 0 };
+	double encRes[NUM_AXES] = { AXIS0_REV,AXIS1_REV };
+	for (size_t point = 0; point < pos[0].size(); point++) {
+		float x = pos[0][point];
+		float y = pos[1][point];
+
+		std::stringstream msg;
+		msg << "move to position = " << x << "," << y;
+		LogInfo(msg.str());
+
+		float magnitude = sqrt(x * x + y * y);
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			unitDirection[i] = pos[i][point] / magnitude;
+		}
+
+		DWORD	profileVelocity[NUM_AXES] = { 0 },
+				profileAcceleration[NUM_AXES] = { 0 },
+				profileDeceleration[NUM_AXES] = { 0 };
+		
+		/*for (size_t i = 0; i < NUM_AXES; i++) {
+			profileVelocity[i] = pathVelocity * unitDirection[i];
+			profileAcceleration[i] = pathAcceleration * unitDirection[i]/60.0;
+			profileDeceleration[i] = pathAcceleration * unitDirection[i]/60.0;
+		}*/
+
+		// make sure all drives have 1024 ppr
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			profileVelocity[i]		= (double)(pathVelocity		/ encRes[i] * unitDirection[i] * 1000/*1000 counts per rev*/);
+			profileAcceleration[i]	= (double)(pathAcceleration	/ encRes[i] * unitDirection[i] * 1000);
+			profileDeceleration[i]	= (double)(pathAcceleration	/ encRes[i] * unitDirection[i] * 1000);
+		}
+		
+
+		//profileVelocity[1]		= (float)(pathVelocity / AXIS1_REV * unitDirection[1]	  * 1000);
+		//profileAcceleration[1]	= (float)(pathAcceleration / AXIS1_REV * unitDirection[1] * 1000);
+		//profileDeceleration[1]	= (float)(pathAcceleration / AXIS1_REV * unitDirection[1] * 1000);
+
+		if (!VCS_SetPositionProfile(pDeviceHandle,
+									1,
+									profileVelocity[0],
+									profileAcceleration[0],
+									profileDeceleration[0],
+									&rErrorCode)) {
+			LogError("VCS_SetPositionProfile x", success, rErrorCode);
+			success = false;
+			return success;
+		}
+		if (!VCS_SetPositionProfile(pDeviceHandle,
+									2,
+									profileVelocity[1],
+									profileAcceleration[1],
+									profileDeceleration[1],
+									&rErrorCode)) {
+			LogError("VCS_SetPositionProfile y", success, rErrorCode);
+			success = false;
+			return success;
+		}
+		bool immediate = true;
+		bool absolute = false;
+		if (!VCS_MoveToPosition(pDeviceHandle, 1 , x, absolute, immediate, &rErrorCode)) {
+			LogError("VCS_MoveToPosition x", success, rErrorCode);
+			success = false;
+			return success;
+		}
+		if (! VCS_MoveToPosition(pDeviceHandle, 2, y, absolute, immediate, &rErrorCode) ) {
+			LogError("VCS_MoveToPosition y", success, rErrorCode);
+			success = false;
+			return success;
+		}
+
+		while( !( getTargetReached(pDeviceHandle, 1) && getTargetReached(pDeviceHandle, 2) ) )
+		{
+			long cmdPos[NUM_AXES] = { getCommandPosition(pDeviceHandle, 1), getCommandPosition(pDeviceHandle, 2) };
+			std::stringstream msg;
+			msg << "cmd position = " << cmdPos[0] << "," << cmdPos[1];
+			LogInfo(msg.str());
+			sleep(1);
+		}
+
+		long finalPos[NUM_AXES] = { 0 };
+		if( VCS_GetPositionIs(pDeviceHandle, 1, &finalPos[0], &rErrorCode) && 
+			VCS_GetPositionIs(pDeviceHandle, 2, &finalPos[1], &rErrorCode)) {
+			std::stringstream msg;
+			msg << "final position = " << finalPos[0] << "," << finalPos[1];
+			LogInfo(msg.str());
+		}
+		sleep(1);
+	}
+	return success;
 }
 
 int jodoDemo(DWORD* pErrorCode)
@@ -223,6 +367,19 @@ int jodoDemo(DWORD* pErrorCode)
 	return lResult;
 }
 
+bool jodoPathDemo(DWORD* pErrorCode)
+{
+	bool success = jodoCatheterPath(g_pKeyHandle, *pErrorCode);
+	if (!success)
+	{
+		LogError("jodoDemoProfilePositionMode", success, *pErrorCode);
+		return success;
+	}
+	LogInfo("halt position movement");
+	haltPositionMovementDrives(pErrorCode);
+	disableDrives(pErrorCode);
+	return success;
+}
 /****************************************************************************/
 
 
@@ -457,7 +614,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 				std::stringstream msg;
 				msg << "cmd position = " << cmdPos << ", node = " << p_usNodeId;
 				LogInfo(msg.str());
-				Sleep(1);
+				sleep(1);
 			}
 
 			long finalPos = 0;
@@ -468,7 +625,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 			}
 
 
-			Sleep(1);
+			sleep(1);
 		}
 		
 		if(lResult == MMC_SUCCESS)
@@ -523,7 +680,7 @@ bool DemoProfileVelocityMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, D
 				break;
 			}
 
-			Sleep(1);
+			sleep(1);
 		}
 
 		if(lResult == MMC_SUCCESS)
@@ -805,12 +962,11 @@ int main(int argc, char** argv)
 					return lResult;
 				}
 			}
-			
 
-			if((lResult = jodoDemo(&ulErrorCode))!=MMC_SUCCESS)
+			if( !jodoPathDemo(&ulErrorCode) )
 			{
-				LogError("jodoDemo", lResult, ulErrorCode);
-				return lResult;
+				LogError("jodoPathDemo", false, ulErrorCode);
+				return false;
 			}
 
 			if((lResult = CloseDevice(&ulErrorCode))!=MMC_SUCCESS)
