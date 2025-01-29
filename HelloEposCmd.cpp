@@ -80,9 +80,127 @@ int   PrintDeviceVersion();
 
 /****************************************************************************/
 /*	jodo add																*/
+enum PPMMask
+{
+	SwitchedOn= 0x1,
+	EnableVoltage = 0x2,
+	QuickStop = 0x4,
+	EnableOperation=0x8,
+	NewSetpoint=0x10,
+	Immediately=0x20, 
+	Rel_Abs =0x40, 
+	FaultReset = 0x80,
+	Halt = 0x100,
+	EndlessMovement = 0x8000,
+};
 bool  getTargetReached(HANDLE deviceHandle, unsigned short nodeId);
 long  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId);
+int	  getTargetPosition(HANDLE deviceHandle, unsigned short nodeId);
+void  setTargetPosition(HANDLE deviceHandle, unsigned short nodeId, int target);
+WORD  getControlword(HANDLE deviceHandle, unsigned short nodeId);
+void  setControlword(HANDLE deviceHandle, unsigned short nodeId, WORD control);
+void  moveAbs(HANDLE deviceHandle, unsigned short nodeId);
+void  moveRel(HANDLE deviceHandle, unsigned short nodeId);
+void moveReset(HANDLE deviceHandle, unsigned short nodeId);
 
+void  moveAbs(HANDLE deviceHandle, unsigned short nodeId) {
+	PPMMask move = (PPMMask)((WORD)SwitchedOn |
+									EnableVoltage |
+									QuickStop |
+									EnableOperation |
+									NewSetpoint |	// this bit must go 0->1 for motion
+									Immediately);
+	setControlword(deviceHandle, nodeId, move);
+}
+
+void moveReset(HANDLE deviceHandle, unsigned short nodeId) {
+	PPMMask reset = (PPMMask)((WORD)SwitchedOn |
+									EnableVoltage |
+									QuickStop |
+									EnableOperation);
+	setControlword(deviceHandle, nodeId, reset);
+}
+void  moveRel(HANDLE deviceHandle, unsigned short nodeId) {
+	PPMMask move = (PPMMask)((WORD)SwitchedOn |
+									EnableVoltage |
+									QuickStop |
+									EnableOperation |
+									NewSetpoint |	// this bit must go 0->1 for motion
+									Rel_Abs |
+									Immediately);
+	setControlword(deviceHandle, nodeId, move);
+}
+
+void  setControlword(HANDLE deviceHandle, unsigned short nodeId, WORD control) {
+	DWORD errorCode = 0;
+	DWORD NbOfBytesWritten = 0;
+	bool success = VCS_SetObject(deviceHandle,
+		nodeId,
+		0x6040,
+		0x00,
+		&control,
+		2,
+		&NbOfBytesWritten,
+		&errorCode);
+	if (!success)
+	{
+		throw errorCode;
+	}
+}
+
+WORD getControlword(HANDLE deviceHandle, unsigned short nodeId) {
+	DWORD errorCode = 0;
+	WORD control = 0;
+	DWORD NbOfBytesRead = 0;
+	bool success = VCS_GetObject(deviceHandle,
+		nodeId,
+		0x6040,
+		0x00,
+		&control,
+		2,
+		&NbOfBytesRead,
+		&errorCode);
+	if (!success)
+	{
+		throw errorCode;
+	}
+	return control;
+}
+
+void  setTargetPosition(HANDLE deviceHandle, unsigned short nodeId, int target) {
+	DWORD errorCode = 0;
+	DWORD NbOfBytesWritten = 0;
+	bool success = VCS_SetObject(deviceHandle,
+		nodeId,
+		0x607A,
+		0x00,
+		&target,
+		4,
+		&NbOfBytesWritten,
+		&errorCode);
+	if (!success)
+	{
+		throw errorCode;
+	}
+}
+int  getTargetPosition(HANDLE deviceHandle, unsigned short nodeId) {
+	DWORD errorCode = 0;
+	int target = 0;
+	DWORD NbOfBytesRead = 0;
+	bool success = VCS_GetObject(deviceHandle,
+		nodeId,
+		0x607A,
+		0x00,
+		&target,
+		4,
+		&NbOfBytesRead,
+		&errorCode);
+	if (!success)
+	{
+		throw errorCode;
+	}
+	return target;
+}
 bool  getTargetReached(HANDLE deviceHandle, unsigned short nodeId) {
 	DWORD errorCode = 0;
 	BOOL targetReached = FALSE;
@@ -298,7 +416,7 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 		//profileVelocity[1]		= (float)(pathVelocity / AXIS1_REV * unitDirection[1]	  * 1000);
 		//profileAcceleration[1]	= (float)(pathAcceleration / AXIS1_REV * unitDirection[1] * 1000);
 		//profileDeceleration[1]	= (float)(pathAcceleration / AXIS1_REV * unitDirection[1] * 1000);
-
+		//PPMMask ctrl = (PPMMask)getControlword(pDeviceHandle, 1);
 		if (!VCS_SetPositionProfile(pDeviceHandle,
 									1,
 									profileVelocity[0],
@@ -309,6 +427,7 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 			success = false;
 			return success;
 		}
+		//ctrl = (PPMMask)getControlword(pDeviceHandle, 1);
 		if (!VCS_SetPositionProfile(pDeviceHandle,
 									2,
 									profileVelocity[1],
@@ -319,24 +438,44 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 			success = false;
 			return success;
 		}
-		bool immediate = true;
-		bool absolute = false;
-		if (!VCS_MoveToPosition(pDeviceHandle, 1 , x, absolute, immediate, &rErrorCode)) {
+		/*int immediate = true;
+		int absolute = false;
+		if (!VCS_MoveToPosition(pDeviceHandle, 1, x, absolute, immediate, &rErrorCode)) {
 			LogError("VCS_MoveToPosition x", success, rErrorCode);
 			success = false;
 			return success;
 		}
+		ctrl = (PPMMask)getControlword(pDeviceHandle, 1);
+
 		if (! VCS_MoveToPosition(pDeviceHandle, 2, y, absolute, immediate, &rErrorCode) ) {
 			LogError("VCS_MoveToPosition y", success, rErrorCode);
 			success = false;
 			return success;
-		}
+		}*/
+
+		setTargetPosition(pDeviceHandle, 1, x);
+		setTargetPosition(pDeviceHandle, 2, y);
+
+		// 0: all axis start move at the same time. Only works for unit1
+		// moveAbs(pDeviceHandle, 0);
+		auto start = std::chrono::high_resolution_clock::now();
+		moveRel(pDeviceHandle, 1);
+		moveRel(pDeviceHandle, 2);
+
+		moveReset(pDeviceHandle, 1);
+		moveReset(pDeviceHandle, 2);
+		auto end = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> elapsed = end - start;
+		std::stringstream msgMove;
+		msgMove << "msgMove = " << elapsed.count();
+		LogInfo(msgMove.str());
+
 		do
 		{
 			// each getCommandPosition() takes 2.5 ms
-			auto start = std::chrono::high_resolution_clock::now();
+			start = std::chrono::high_resolution_clock::now();
 			long cmdPos[NUM_AXES] = { getCommandPosition(pDeviceHandle, 1), getCommandPosition(pDeviceHandle, 2) };
-			auto end = std::chrono::high_resolution_clock::now();
+			end = std::chrono::high_resolution_clock::now();
 			std::chrono::duration<double> elapsed = end - start;
 
 			std::stringstream msg;
