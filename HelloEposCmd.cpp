@@ -38,6 +38,7 @@ enum EAppMode
 
 const int NUM_AXES = 2;
 void* g_pKeyHandle = 0;
+//void* g_pCanKey    = 0;
 unsigned short g_usNodeId;
 std::string g_deviceName;
 std::string g_protocolStackName;
@@ -457,7 +458,7 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 		setTargetPosition(pDeviceHandle, 2, y);
 
 		// 0: all axis start move at the same time. Only works for unit1
-		// moveAbs(pDeviceHandle, 0);
+		moveRel(pDeviceHandle, 0);
 		auto start = std::chrono::high_resolution_clock::now();
 		moveRel(pDeviceHandle, 1);
 		moveRel(pDeviceHandle, 2);
@@ -512,7 +513,7 @@ int jodoDemo(DWORD* pErrorCode)
 
 bool jodoPathDemo(DWORD* pErrorCode)
 {
-	bool success = jodoCatheterPath(g_pKeyHandle, *pErrorCode);
+	bool success = jodoCatheterPath(/*g_pCanKey*/g_pKeyHandle, *pErrorCode);
 	if (!success)
 	{
 		LogError("jodoDemoProfilePositionMode", success, *pErrorCode);
@@ -621,6 +622,8 @@ int OpenDevice(DWORD* p_pErrorCode)
 					if(g_baudrate==(int)lBaudrate)
 					{
 						lResult = MMC_SUCCESS;
+						//g_pCanKey = VCS_OpenSubDevice(g_pKeyHandle, (char*)"EPOS4", (char*)"canopen", p_pErrorCode);
+
 					}
 				}
 			}
@@ -628,6 +631,7 @@ int OpenDevice(DWORD* p_pErrorCode)
 	}
 	else
 	{
+		//g_pCanKey = 0;
 		g_pKeyHandle = 0;
 	}
 
