@@ -441,6 +441,13 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 		}
 		/*int immediate = true;
 		int absolute = false;
+		if (!VCS_MoveToPosition(pDeviceHandle, 0, x, absolute, immediate, &rErrorCode)) {
+			LogError("VCS_MoveToPosition x", success, rErrorCode);
+			success = false;
+			return success;
+		}*/
+		/*int immediate = true;
+		int absolute = false;
 		if (!VCS_MoveToPosition(pDeviceHandle, 1, x, absolute, immediate, &rErrorCode)) {
 			LogError("VCS_MoveToPosition x", success, rErrorCode);
 			success = false;
@@ -458,7 +465,7 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 		setTargetPosition(pDeviceHandle, 2, y);
 
 		// 0: all axis start move at the same time. Only works for unit1
-		moveRel(pDeviceHandle, 0);
+		// moveRel(pDeviceHandle, 0);
 		auto start = std::chrono::high_resolution_clock::now();
 		moveRel(pDeviceHandle, 1);
 		moveRel(pDeviceHandle, 2);
