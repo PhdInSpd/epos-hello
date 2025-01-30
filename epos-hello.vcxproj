@@ -144,6 +144,7 @@
   <ItemGroup>
     <ClCompile Include="getopt.c" />
     <ClCompile Include="HelloEposCmd.cpp" />
+    <ClInclude Include="Scaling.h" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Definitions.h" />

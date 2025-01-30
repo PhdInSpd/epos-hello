@@ -22,6 +22,7 @@
 #include <vector>
 //#include <sys/times.h>
 //#include <sys/time.h>
+#include "Scaling.h"
 #define sleep Sleep
 
 typedef void* HANDLE;
@@ -36,7 +37,6 @@ enum EAppMode
 	AM_VERSION_INFO
 };
 
-const int NUM_AXES = 2;
 void* g_pKeyHandle = 0;
 //void* g_pCanKey    = 0;
 unsigned short g_usNodeId;
@@ -374,7 +374,6 @@ bool jodoCatheterPath(HANDLE pDevice,DWORD& rErrorCode) {
 	//(REVSm / sec)/sec
     double pathAcceleration		= 20;
 	std::vector<double> pos[NUM_AXES];
-	const double AXIS0_REV = 2048 * 4;
 	// units in motor revs
 	pos[0].push_back( 0.0f );
 	pos[0].push_back( 0.2f );
@@ -385,8 +384,6 @@ bool jodoCatheterPath(HANDLE pDevice,DWORD& rErrorCode) {
 	pos[0].push_back( 3.0f );
 	pos[0].push_back( 3.0f );
 	
-	const double AXIS1_REV = 1024 * 4 ; 
-	const double GEAR_RATIO_44 = 44;
 	pos[1].push_back( 0.0f );
 	pos[1].push_back( 0.1f );
 	pos[1].push_back( 0.2f );
@@ -400,13 +397,6 @@ bool jodoCatheterPath(HANDLE pDevice,DWORD& rErrorCode) {
 	double unitDirection[NUM_AXES] = { 0 };
 	double encRes[NUM_AXES] = { AXIS0_REV, AXIS1_REV };
 
-	// convert from revs to encoder count
-	double scld[NUM_AXES] = { AXIS0_REV, AXIS1_REV * GEAR_RATIO_44 };
-	// axis 0: convert from REVSm/sec to velocity count REVSm(1/10000)/min
-	// axis 1: convert from REVSg/sec to velocity count REVSm(1/10000)/min
-	double sclv[NUM_AXES] = { 60.0*10000.0, GEAR_RATIO_44 *60*10000.0 };
-	// convert from revs/sec^2 to acceleration count (REVSm/min)/sec
-	double scla[NUM_AXES] = { 1.0*60.0, GEAR_RATIO_44 *60.0 };
 	
 	for (size_t point = 0; point < pos[0].size(); point++) {
 		double startPos[NUM_AXES] = { getTargetPosition(pDevice,1) / scld[0],
@@ -541,6 +531,253 @@ bool jodoCatheterPath(HANDLE pDevice,DWORD& rErrorCode) {
 	return success;
 }
 
+bool jodoContunuousCatheterPath(HANDLE pDevice, DWORD& rErrorCode) {
+	bool success = true;
+
+	LogInfo("set profile position mode");
+
+	if (!(success = activateProfilePositionModeDrives(&rErrorCode)))
+	{
+		return success;
+	}
+	// (REVSm / sec)
+	std::vector<double> pathVelocity;
+	pathVelocity.push_back(1.0);
+	pathVelocity.push_back(0.05);
+	pathVelocity.push_back(0.1);
+	pathVelocity.push_back(0.15);
+	pathVelocity.push_back(0.2);
+	pathVelocity.push_back(0.25);
+	pathVelocity.push_back(0.30);
+	pathVelocity.push_back(0.35);
+	pathVelocity.push_back(0.40);
+
+	//(REVSm / sec)/sec
+	double pathAcceleration = 20;
+	std::vector<double> pos[NUM_AXES];
+	
+	// units in motor revs
+	pos[0].push_back(0.0f);
+	pos[0].push_back(0.2f);
+	pos[0].push_back(0.5f);
+	pos[0].push_back(0.7f);
+	pos[0].push_back(1.0f);
+	pos[0].push_back(1.3f);
+	pos[0].push_back(1.7f);
+	pos[0].push_back(1.7f);
+	pos[0].push_back(1.7f);
+
+	
+	pos[1].push_back(0.0f);
+	pos[1].push_back(0.1f *2);
+	pos[1].push_back(0.2f *2);
+	pos[1].push_back(0.3f *2);
+	pos[1].push_back(0.4f *2);
+	pos[1].push_back(-0.5f *2);
+	pos[1].push_back(0.6f *2);
+	pos[1].push_back(-0.6f *2);
+	pos[1].push_back(-2.8f);
+
+	double unitDirection[NUM_AXES] = { 0 };
+
+	
+
+	int noPoints = pos[0].size();
+	for (size_t point = 0; point < noPoints; point++) {
+		double startPos[NUM_AXES] = { 0 };
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			startPos[i] = point == 0 ?
+							getCommandPosition(pDevice, 1 + i) / scld[i] :
+							//getCommandPosition(pDevice, 1 + i) / scld[i];
+							pos[i][point-1];
+		}
+
+		double delta[NUM_AXES] = { 0 };
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			delta[i] = pos[i][point] - startPos[i];
+		}
+
+		// results has zero magnitude and invalid unitDirection
+		int faildedDelta =  0 ;
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			faildedDelta += (long)(delta[i] * scld[i]) == 0? 1: 0;
+		}
+		if (faildedDelta >= NUM_AXES) {
+			LogInfo("FAILED MAGNITUDE");
+			continue;
+		}
+
+		double nextDelta[NUM_AXES] = { 0 };
+		bool nextSegmentValid = false;
+		// does next getment exist?
+		if ((point + 1) < noPoints) {
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				nextDelta[i] = pos[i][point+1] - pos[i][point];
+			}
+			faildedDelta = 0;
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				faildedDelta += (long)(nextDelta[i] * scld[i]) == 0 ? 1 : 0;
+			}
+			if (faildedDelta < NUM_AXES) {
+				// sigh must have same direction
+				bool signPassed = true;
+				for (size_t i = 0; i < NUM_AXES; i++) {
+					// sign flipped
+					if (nextDelta[i] * delta[i] < 0) {
+						signPassed = false;
+						break;
+					}
+				}
+				nextSegmentValid = signPassed;
+			}
+		}
+
+		std::stringstream msg;
+		msg << "abs move = " << delta[0] << "," << delta[1];
+		LogInfo(msg.str());
+
+		double magSquared = 0;
+		for ( size_t i = 0; i < NUM_AXES; i++){
+			magSquared += (delta[i] * delta[i]);
+		}
+		double magnitude = sqrt(magSquared);
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			unitDirection[i] = (long)(delta[i] * scld[i]) != 0 ? delta[i] / magnitude : 1;
+		}
+
+		DWORD	profileVelocity[NUM_AXES] = { 0 },
+				profileAcceleration[NUM_AXES] = { 0 },
+				profileDeceleration[NUM_AXES] = { 0 };
+
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			profileVelocity[i] = fabs((double)(pathVelocity[point] * sclv[i] * unitDirection[i]));
+			profileAcceleration[i] = fabs((double)(pathAcceleration * scla[i] * unitDirection[i]));
+			profileDeceleration[i] = fabs((double)(pathAcceleration * scla[i] * unitDirection[i]));
+		}
+
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			if (!VCS_SetPositionProfile(pDevice,
+				1 + i,
+				profileVelocity[i],
+				profileAcceleration[i],
+				profileDeceleration[i],
+				&rErrorCode)) {
+				std::string error = "VCS_SetPositionProfile " + i;
+				LogError(error, success, rErrorCode);
+				success = false;
+				return success;
+			}
+		}
+
+		if (nextSegmentValid) {
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				setTargetPosition(pDevice, 1 + i, pos[i][point+1] * scld[i]);
+			}
+		}
+		else {
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				setTargetPosition(pDevice, 1 + i, pos[i][point] * scld[i]);
+			}
+		}
+		
+
+		// 0:	all axis start move at the same time.
+		//		Only works for unit1
+		// moveRel(pDeviceHandle, 0);
+		auto start = std::chrono::high_resolution_clock::now();
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			moveAbs(pDevice, 1 + i);
+		}
+		auto end = std::chrono::high_resolution_clock::now();
+
+		std::chrono::duration<double> elapsed = end - start;
+		std::stringstream msgMove;
+		msgMove << nextSegmentValid+1<< "segments = " << elapsed.count();
+		LogInfo(msgMove.str());
+
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			moveReset(pDevice, 1 + i);
+		}
+
+		if (nextSegmentValid)
+		{
+			// wait trigger reached
+			bool triggerReached = true;
+			long cmdPos[NUM_AXES] = { 0 };
+			long triggerPos = pos[0][point] * scld[0];
+
+			do
+			{
+				// each getCommandPosition() takes 2.5 ms
+				start = std::chrono::high_resolution_clock::now();
+				for (size_t i = 0; i < NUM_AXES; i++) {
+					cmdPos[i] = getCommandPosition(pDevice, 1 + i);
+				}
+				end = std::chrono::high_resolution_clock::now();
+				std::chrono::duration<double> elapsed = end - start;
+				
+				if (delta[0] < 0) {
+					triggerReached = cmdPos[0] <= triggerPos;
+				}
+				else {
+					triggerReached = cmdPos[0] >= triggerPos;
+				}
+				//sleep(1);
+			} while (!triggerReached);
+			std::stringstream msg;
+			msg << " trigger done: cmdPos = ";
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				msg << cmdPos[i] << ",";
+			}
+			msg << " :" << elapsed.count();
+			LogInfo(msg.str());
+		}
+		else {
+	
+
+			// wait target reached
+			bool targetsReached = true;
+			do
+			{
+				// each getCommandPosition() takes 2.5 ms
+				start = std::chrono::high_resolution_clock::now();
+				long cmdPos[NUM_AXES] = { 0 };
+				for (size_t i = 0; i < NUM_AXES; i++) {
+					cmdPos[i] = getCommandPosition(pDevice, 1 + i);
+				}
+				end = std::chrono::high_resolution_clock::now();
+				std::chrono::duration<double> elapsed = end - start;
+
+				std::stringstream msg;
+				msg << "cmd position = ";
+				for (size_t i = 0; i < NUM_AXES; i++) {
+					msg << cmdPos[i] << ",";
+				}
+				msg << " :" << elapsed.count();
+				LogInfo(msg.str());
+
+				targetsReached = true;
+				for (size_t i = 0; i < NUM_AXES; i++) {
+					targetsReached = getTargetReached(pDevice, 1 + i) && targetsReached;
+				}
+				sleep(1);
+			} while (!targetsReached);
+		}
+
+		long finalPos[NUM_AXES] = { 0 };
+		bool gotPos = true;
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			gotPos = VCS_GetPositionIs(pDevice, 1+i, &finalPos[i], &rErrorCode) && gotPos;
+		}
+		if (gotPos) {
+			std::stringstream msg;
+			msg << "final position = " << finalPos[0] / scld[0] << "," << finalPos[0] << "," << finalPos[1] / scld[1] << "," << finalPos[1];
+			LogInfo(msg.str());
+		}
+		sleep(1);
+	}
+	return success;
+}
 int jodoDemo(DWORD* pErrorCode)
 {
 	int lResult = jodoDemoProfilePositionMode(g_pKeyHandle, g_usNodeId, *pErrorCode);
@@ -557,7 +794,7 @@ int jodoDemo(DWORD* pErrorCode)
 
 bool jodoPathDemo(DWORD* pErrorCode)
 {
-	bool success = jodoCatheterPath(/*g_pCanKey*/g_pKeyHandle, *pErrorCode);
+	bool success = jodoContunuousCatheterPath(g_pKeyHandle, *pErrorCode);
 	if (!success)
 	{
 		LogError("jodoDemoProfilePositionMode", success, *pErrorCode);
