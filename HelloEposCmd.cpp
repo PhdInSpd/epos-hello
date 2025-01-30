@@ -354,7 +354,7 @@ int jodoDemoProfilePositionMode(HANDLE pDeviceHandle, unsigned short nodeId, DWO
 	return lResult;
 }
 
-bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
+bool jodoCatheterPath(HANDLE pDevice,DWORD& rErrorCode) {
 	bool success = true;
 
 	std::stringstream msg;
@@ -366,59 +366,90 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 		return success;
 	}
 	// (COUNTS / min)
-	double pathVelocity		=    7500000;
-	// (counts / min) / sec
-	double pathAcceleration =     50000;
-	std::vector<long> pos[NUM_AXES];
-	const float AXIS0_REV = 2048 * 4;
-	pos[0].push_back(0.2f*  AXIS0_REV);
-	pos[0].push_back(0.5f * AXIS0_REV);
-	pos[0].push_back(0.7f * AXIS0_REV);
-	pos[0].push_back(1.0f * AXIS0_REV);
+	// double pathVelocity		=   500000;
+	// (REVSm / sec)
+	 double pathVelocity		=	.05/*1*/;
+	// (counts / min) / min
+	//double pathAcceleration		=   50000000;
+	//(REVSm / sec)/sec
+    double pathAcceleration		= 20;
+	std::vector<double> pos[NUM_AXES];
+	const double AXIS0_REV = 2048 * 4;
+	// units in motor revs
+	pos[0].push_back( 0.0f );
+	pos[0].push_back( 0.2f );
+	pos[0].push_back( 0.5f );
+	pos[0].push_back( 0.7f );
+	pos[0].push_back( 1.0f );
+	pos[0].push_back( 2.7f );
+	pos[0].push_back( 3.0f );
+	pos[0].push_back( 3.0f );
 	
-	const float AXIS1_REV = 1024 * 4 ;
-	const float GEAR_RATIO = 44;
-	pos[1].push_back(0.1f * AXIS1_REV);
-	pos[1].push_back(0.2f * AXIS1_REV*GEAR_RATIO);
-	pos[1].push_back(0.3f * AXIS1_REV*GEAR_RATIO);
-	pos[1].push_back(0.4f * AXIS1_REV*GEAR_RATIO);
-	double unitDirection[NUM_AXES] = { 0 };
-	double encRes[NUM_AXES] = { AXIS0_REV,AXIS1_REV };
-	for (size_t point = 0; point < pos[0].size(); point++) {
-		float x = pos[0][point];
-		float y = pos[1][point];
+	const double AXIS1_REV = 1024 * 4 ; 
+	const double GEAR_RATIO_44 = 44;
+	pos[1].push_back( 0.0f );
+	pos[1].push_back( 0.1f );
+	pos[1].push_back( 0.2f );
+	pos[1].push_back( 0.3f );
+	pos[1].push_back( 0.4f );
+	pos[1].push_back( 0.6f );
+	pos[1].push_back( 0.6f );
+	pos[1].push_back( 1.6f );
 
+	
+	double unitDirection[NUM_AXES] = { 0 };
+	double encRes[NUM_AXES] = { AXIS0_REV, AXIS1_REV };
+
+	// convert from revs to encoder count
+	double scld[NUM_AXES] = { AXIS0_REV, AXIS1_REV * GEAR_RATIO_44 };
+	// axis 0: convert from REVSm/sec to velocity count REVSm(1/10000)/min
+	// axis 1: convert from REVSg/sec to velocity count REVSm(1/10000)/min
+	double sclv[NUM_AXES] = { 60.0*10000.0, GEAR_RATIO_44 *60*10000.0 };
+	// convert from revs/sec^2 to acceleration count (REVSm/min)/sec
+	double scla[NUM_AXES] = { 1.0*60.0, GEAR_RATIO_44 *60.0 };
+	
+	for (size_t point = 0; point < pos[0].size(); point++) {
+		double startPos[NUM_AXES] = { getTargetPosition(pDevice,1) / scld[0],
+									  getTargetPosition(pDevice,2) / scld[1] };
+
+		double delta[NUM_AXES] = { 0 };
+		for (size_t i = 0; i < NUM_AXES; i++)
+		{
+			delta[i] = pos[i][point] - startPos[i];
+		}
+		// results in zero magnitude and invalid unitDirection
+		if (	(long)(delta[0]*scld[0])==0 && 
+				(long)(delta[1]*scld[0])==0)
+		{
+			continue;
+		}
 		std::stringstream msg;
-		msg << "move to position = " << x << "," << y;
+		msg << "relative move = " << delta[0] << "," << delta[1];
 		LogInfo(msg.str());
 
-		float magnitude = sqrt(x * x + y * y);
+		double magSquared = (delta[0] * delta[0]) + (delta[1] * delta[1]);
+		double magnitude = sqrt(magSquared);
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			unitDirection[i] = pos[i][point] / magnitude;
+			unitDirection[i] = (long)(delta[i]*scld[i])!=0 ?delta[i] / magnitude:1;
 		}
 
-		DWORD	profileVelocity[NUM_AXES] = { 0 },
-				profileAcceleration[NUM_AXES] = { 0 },
-				profileDeceleration[NUM_AXES] = { 0 };
+		DWORD	profileVelocity[NUM_AXES]		= { 0 },
+				profileAcceleration[NUM_AXES]	= { 0 },
+				profileDeceleration[NUM_AXES]	= { 0 };
 		
-		/*for (size_t i = 0; i < NUM_AXES; i++) {
-			profileVelocity[i] = pathVelocity * unitDirection[i];
-			profileAcceleration[i] = pathAcceleration * unitDirection[i]/60.0;
-			profileDeceleration[i] = pathAcceleration * unitDirection[i]/60.0;
-		}*/
-
-		// make sure all drives have 1024 ppr
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			profileVelocity[i]		= (double)(pathVelocity		/ encRes[i] * unitDirection[i] * 1000/*1000 counts per rev*/);
-			profileAcceleration[i]	= (double)(pathAcceleration	/ encRes[i] * unitDirection[i] * 1000);
-			profileDeceleration[i]	= (double)(pathAcceleration	/ encRes[i] * unitDirection[i] * 1000);
+			//profileVelocity[i]		= fabs( (double)(	pathVelocity		/ 
+			//											encRes[i] * unitDirection[i] * 10000
+			//											/*canopen velocity unit determine 1 input count = 1/10000 rpm*/) );			 
+			//profileAcceleration[i]	= fabs( (double)(pathAcceleration	/ encRes[i] * unitDirection[i] * 60) );
+			//profileDeceleration[i]	= fabs( (double)(pathAcceleration	/ encRes[i] * unitDirection[i] * 60) );
+
+			profileVelocity[i]		= fabs((double)(pathVelocity		* sclv[i] * unitDirection[i]) );			 
+			profileAcceleration[i]	= fabs( (double)(pathAcceleration	* scla[i] * unitDirection[i] ) );
+			profileDeceleration[i]	= fabs( (double)(pathAcceleration	* scla[i] * unitDirection[i] ) );
 		}
 
-		//profileVelocity[1]		= (float)(pathVelocity / AXIS1_REV * unitDirection[1]	  * 1000);
-		//profileAcceleration[1]	= (float)(pathAcceleration / AXIS1_REV * unitDirection[1] * 1000);
-		//profileDeceleration[1]	= (float)(pathAcceleration / AXIS1_REV * unitDirection[1] * 1000);
-		//PPMMask ctrl = (PPMMask)getControlword(pDeviceHandle, 1);
-		if (!VCS_SetPositionProfile(pDeviceHandle,
+		if (!VCS_SetPositionProfile(pDevice,
 									1,
 									profileVelocity[0],
 									profileAcceleration[0],
@@ -428,8 +459,7 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 			success = false;
 			return success;
 		}
-		//ctrl = (PPMMask)getControlword(pDeviceHandle, 1);
-		if (!VCS_SetPositionProfile(pDeviceHandle,
+		if (!VCS_SetPositionProfile(pDevice,
 									2,
 									profileVelocity[1],
 									profileAcceleration[1],
@@ -439,6 +469,7 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 			success = false;
 			return success;
 		}
+		// no motion on node 2
 		/*int immediate = true;
 		int absolute = false;
 		if (!VCS_MoveToPosition(pDeviceHandle, 0, x, absolute, immediate, &rErrorCode)) {
@@ -461,28 +492,34 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 			return success;
 		}*/
 
-		setTargetPosition(pDeviceHandle, 1, x);
-		setTargetPosition(pDeviceHandle, 2, y);
+		setTargetPosition(pDevice, 1, pos[0][point]*scld[0]);
+		setTargetPosition(pDevice, 2, pos[1][point]*scld[1]);
 
-		// 0: all axis start move at the same time. Only works for unit1
+		// 0:	all axis start move at the same time.
+		//		Only works for unit1
 		// moveRel(pDeviceHandle, 0);
 		auto start = std::chrono::high_resolution_clock::now();
-		moveRel(pDeviceHandle, 1);
-		moveRel(pDeviceHandle, 2);
-
-		moveReset(pDeviceHandle, 1);
-		moveReset(pDeviceHandle, 2);
+		for (size_t i = 0; i < NUM_AXES; i++)
+		{
+			moveAbs(pDevice, 1+i);
+		}
+		
 		auto end = std::chrono::high_resolution_clock::now();
+
+		moveReset(pDevice, 1);
+		moveReset(pDevice, 2);
+
 		std::chrono::duration<double> elapsed = end - start;
 		std::stringstream msgMove;
 		msgMove << "msgMove = " << elapsed.count();
 		LogInfo(msgMove.str());
 
+		// wait target reached
 		do
 		{
 			// each getCommandPosition() takes 2.5 ms
 			start = std::chrono::high_resolution_clock::now();
-			long cmdPos[NUM_AXES] = { getCommandPosition(pDeviceHandle, 1), getCommandPosition(pDeviceHandle, 2) };
+			long cmdPos[NUM_AXES] = { getCommandPosition(pDevice, 1), getCommandPosition(pDevice, 2) };
 			end = std::chrono::high_resolution_clock::now();
 			std::chrono::duration<double> elapsed = end - start;
 
@@ -490,13 +527,13 @@ bool jodoCatheterPath(HANDLE pDeviceHandle,DWORD& rErrorCode) {
 			msg << "cmd position = " << cmdPos[0] << "," << cmdPos[1] << " :" << elapsed.count();
 			LogInfo(msg.str());
 			sleep(1);
-		} while (!(getTargetReached(pDeviceHandle, 1) && getTargetReached(pDeviceHandle, 2)));
+		} while (!(getTargetReached(pDevice, 1) && getTargetReached(pDevice, 2)));
 
 		long finalPos[NUM_AXES] = { 0 };
-		if( VCS_GetPositionIs(pDeviceHandle, 1, &finalPos[0], &rErrorCode) && 
-			VCS_GetPositionIs(pDeviceHandle, 2, &finalPos[1], &rErrorCode)) {
+		if( VCS_GetPositionIs(pDevice, 1, &finalPos[0], &rErrorCode) && 
+			VCS_GetPositionIs(pDevice, 2, &finalPos[1], &rErrorCode)) {
 			std::stringstream msg;
-			msg << "final position = " << finalPos[0] << "," << finalPos[1];
+			msg << "final position = " << finalPos[0]/scld[0] << "," << finalPos[1]/scld[1];
 			LogInfo(msg.str());
 		}
 		sleep(1);
