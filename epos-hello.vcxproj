@@ -144,6 +144,11 @@
   <ItemGroup>
     <ClCompile Include="getopt.c" />
     <ClCompile Include="HelloEposCmd.cpp" />
+    <ClCompile Include="JodoApplication.cpp" />
+    <ClCompile Include="JodoCanopenMotion.cpp" />
+    <ClCompile Include="Scaling.cpp" />
+    <ClInclude Include="JodoApplication.h" />
+    <ClInclude Include="JodoCanopenMotion.h" />
     <ClInclude Include="Scaling.h" />
   </ItemGroup>
   <ItemGroup>
