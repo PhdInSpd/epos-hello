@@ -39,13 +39,19 @@ enum EAppMode
 };
 
 void* g_pKeyHandle = 0;
-//void* g_pCanKey    = 0;
 unsigned short g_usNodeId;
 std::string g_deviceName;
 std::string g_protocolStackName;
 std::string g_interfaceName;
 std::string g_portName;
 int g_baudrate = 0;
+
+// subdevice
+HANDLE subkeyHandle = 0;
+std::string subdeviceName = "EPOS4";
+std::string subprotocolStackName = "CANopen";
+
+
 EAppMode g_eAppMode = AM_DEMO;
 
 const std::string g_programName = "HelloEposCmd";
@@ -67,21 +73,76 @@ void  PrintUsage();
 void  PrintHeader();
 void  PrintSettings();
 int   OpenDevice(DWORD* p_pErrorCode);
-int   CloseDevice(DWORD* p_pErrorCode);
+bool  CloseDevice(DWORD* p_pErrorCode);
 void  SetDefaultParameters();
-int   ParseArguments(int argc, char** argv);
+bool  ParseArguments(int argc, char** argv);
 int   DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD& p_rlErrorCode);
 
 int   Demo(DWORD* p_pErrorCode);
-int   PrepareDemo(DWORD* p_pErrorCode, WORD nodeId);
+bool   PrepareDemo(DWORD* p_pErrorCode, WORD nodeId);
 int   PrintAvailableInterfaces();
 int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
 int	  PrintAvailableProtocols();
-int   PrintDeviceVersion();
+bool   PrintDeviceVersion();
 
 /****************************************************************************/
 /*	jodo application 														*/
+bool DemoJoystickMode(HANDLE pDevice, DWORD& rErrorCode);
 
+bool DemoJoystickMode(HANDLE pDevice, DWORD& rErrorCode) {
+	bool success = true;
+	std::stringstream msg;
+
+	msg << "set profile velocity mode, node = ";
+	LogInfo(msg.str());
+
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		if (VCS_ActivateProfileVelocityMode(pDevice, 1 + i, &rErrorCode) == 0) {
+			LogError("VCS_ActivateProfileVelocityMode", success, rErrorCode);
+			success = false;
+			return success;
+		}
+	}
+
+	std::list<double> velocityList;
+	velocityList.push_back(0.5);
+	velocityList.push_back(1.0);
+	velocityList.push_back(1.5);
+
+	for (std::list<double>::iterator it = velocityList.begin(); it != velocityList.end(); it++) {
+		double targetvelocity = (*it);
+
+		std::stringstream msg;
+		msg << "move with target velocity = " << targetvelocity << " rps ";
+		LogInfo(msg.str());
+
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			long vel = targetvelocity * sclv[i];
+			if (VCS_MoveWithVelocity(pDevice, 1 + i, vel, &rErrorCode) == 0) {
+				success = false;
+				LogError("VCS_MoveWithVelocity", success, rErrorCode);
+				break;
+			}
+		}
+		long cp = getCommandPosition(pDevice, 2);
+		sleep(3000);
+	}
+
+	if (success)
+	{
+		LogInfo("halt velocity movement");
+
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			if (VCS_HaltVelocityMovement(pDevice, 1 + i, &rErrorCode) == 0) {
+				success = false;
+				LogError("VCS_HaltVelocityMovement", success, rErrorCode);
+			}
+		}
+
+	}
+
+	return success;
+}
 
 
 bool jodoPathDemo(DWORD* pErrorCode) {
@@ -120,7 +181,7 @@ bool jodoPathDemo(DWORD* pErrorCode) {
 	pos[1].push_back(0.6f * 2);
 	pos[1].push_back(-0.6f * 2);
 	pos[1].push_back(-2.8f);
-	bool success = jodoContunuousCatheterPath(	g_pKeyHandle,
+	bool success = jodoContunuousCatheterPath(	subkeyHandle,
 												pathVelocity,
 												pathAcceleration,
 												pos,
@@ -130,8 +191,8 @@ bool jodoPathDemo(DWORD* pErrorCode) {
 		return success;
 	}
 	LogInfo("halt position movement");
-	haltPositionMovementDrives(g_pKeyHandle, pErrorCode);
-	disableDrives(g_pKeyHandle, pErrorCode);
+	haltPositionMovementDrives(subkeyHandle, pErrorCode);
+	disableDrives(subkeyHandle, pErrorCode);
 	return success;
 }
 /****************************************************************************/
@@ -193,7 +254,7 @@ void SetDefaultParameters()
 
 int OpenDevice(DWORD* p_pErrorCode)
 {
-	int lResult = MMC_FAILED;
+	int success = false;
 
 	char* pDeviceName = new char[255];
 	char* pProtocolStackName = new char[255];
@@ -214,16 +275,21 @@ int OpenDevice(DWORD* p_pErrorCode)
 		DWORD lBaudrate = 0;
 		DWORD lTimeout = 0;
 
-		if(VCS_GetProtocolStackSettings(g_pKeyHandle, &lBaudrate, &lTimeout, p_pErrorCode)!=0)
-		{
+		if(VCS_GetProtocolStackSettings(g_pKeyHandle, &lBaudrate, &lTimeout, p_pErrorCode)!=0) {
 			if(VCS_SetProtocolStackSettings(g_pKeyHandle, g_baudrate, lTimeout, p_pErrorCode)!=0)
 			{
 				if(VCS_GetProtocolStackSettings(g_pKeyHandle, &lBaudrate, &lTimeout, p_pErrorCode)!=0)
 				{
 					if(g_baudrate==(int)lBaudrate)
 					{
-						lResult = MMC_SUCCESS;
-						//g_pCanKey = VCS_OpenSubDevice(g_pKeyHandle, (char*)"EPOS4", (char*)"canopen", p_pErrorCode);
+						subkeyHandle = VCS_OpenSubDevice(g_pKeyHandle, (char *)subdeviceName.c_str(), (char*)subprotocolStackName.c_str(), p_pErrorCode);
+						if (subkeyHandle>0) {
+							if (VCS_GetGatewaySettings(g_pKeyHandle, &lBaudrate,  p_pErrorCode) != 0) {
+								printf("Gateway baudrate = %u\r\n", g_baudrate);
+								success = true;
+							}
+
+						}
 
 					}
 				}
@@ -232,8 +298,8 @@ int OpenDevice(DWORD* p_pErrorCode)
 	}
 	else
 	{
-		//g_pCanKey = 0;
 		g_pKeyHandle = 0;
+		subkeyHandle = 0;
 	}
 
 	delete []pDeviceName;
@@ -241,29 +307,31 @@ int OpenDevice(DWORD* p_pErrorCode)
 	delete []pInterfaceName;
 	delete []pPortName;
 
-	return lResult;
+	return success;
 }
 
-int CloseDevice(DWORD* p_pErrorCode)
+bool CloseDevice(DWORD* p_pErrorCode)
 {
-	int lResult = MMC_FAILED;
+	bool success = false;
 
 	*p_pErrorCode = 0;
 
 	LogInfo("Close device");
 
-	if(VCS_CloseDevice(g_pKeyHandle, p_pErrorCode)!=0 && *p_pErrorCode == 0)
+	if (VCS_CloseSubDevice(subkeyHandle, p_pErrorCode))
 	{
-		lResult = MMC_SUCCESS;
+		if (VCS_CloseDevice(g_pKeyHandle, p_pErrorCode) != 0 && *p_pErrorCode == 0)
+		{
+			success = true;
+		}
 	}
-
-	return lResult;
+	return success;
 }
 
-int ParseArguments(int argc, char** argv)
+bool ParseArguments(int argc, char** argv)
 {
 	int lOption;
-	int lResult = MMC_SUCCESS;
+	bool success = true;
 
 	opterr = 0;
 
@@ -273,7 +341,7 @@ int ParseArguments(int argc, char** argv)
 		{
 			case 'h':
 				PrintUsage();
-				lResult = 1;
+				success = false;
 				break;
 			case 'd':
 				g_deviceName = optarg;
@@ -307,12 +375,12 @@ int ParseArguments(int argc, char** argv)
 				msg << "Unknown option: '" << char(optopt) << "'!";
 				LogInfo(msg.str());
 				PrintUsage();
-				lResult = MMC_FAILED;
+				success = false;
 				break;
 		}
 	}
 
-	return lResult;
+	return success;
 }
 
 int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD & p_rlErrorCode)
@@ -391,71 +459,16 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 	return lResult;
 }
 
-bool DemoProfileVelocityMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD & p_rlErrorCode)
+bool PrepareDemo(DWORD* pErrorCode, WORD nodeId)
 {
-	int lResult = MMC_SUCCESS;
-	std::stringstream msg;
-
-	msg << "set profile velocity mode, node = " << p_usNodeId;
-
-	LogInfo(msg.str());
-
-	if(VCS_ActivateProfileVelocityMode(p_DeviceHandle, p_usNodeId, &p_rlErrorCode) == 0)
-	{
-		LogError("VCS_ActivateProfileVelocityMode", lResult, p_rlErrorCode);
-		lResult = MMC_FAILED;
-	}
-	else
-	{
-		std::list<long> velocityList;
-
-		velocityList.push_back(100);
-		velocityList.push_back(500);
-		velocityList.push_back(1000);
-
-		for(std::list<long>::iterator it = velocityList.begin(); it !=velocityList.end(); it++)
-		{
-			long targetvelocity = (*it);
-
-			std::stringstream msg;
-			msg << "move with target velocity = " << targetvelocity << " rpm, node = " << p_usNodeId;
-			LogInfo(msg.str());
-
-			if(VCS_MoveWithVelocity(p_DeviceHandle, p_usNodeId, targetvelocity, &p_rlErrorCode) == 0)
-			{
-				lResult = MMC_FAILED;
-				LogError("VCS_MoveWithVelocity", lResult, p_rlErrorCode);
-				break;
-			}
-
-			sleep(1);
-		}
-
-		if(lResult == MMC_SUCCESS)
-		{
-			LogInfo("halt velocity movement");
-
-			if(VCS_HaltVelocityMovement(p_DeviceHandle, p_usNodeId, &p_rlErrorCode) == 0)
-			{
-				lResult = MMC_FAILED;
-				LogError("VCS_HaltVelocityMovement", lResult, p_rlErrorCode);
-			}
-		}
-	}
-
-	return lResult;
-}
-
-int PrepareDemo(DWORD* pErrorCode, WORD nodeId)
-{
-	int lResult = MMC_SUCCESS;
+	bool success = true;
 	BOOL oIsFault = 0;
 
-	if(!VCS_GetFaultState(g_pKeyHandle, nodeId, &oIsFault, pErrorCode ) )
+	if(!VCS_GetFaultState(subkeyHandle, nodeId, &oIsFault, pErrorCode ) )
 	{
-		LogError("VCS_GetFaultState", lResult, *pErrorCode);
-		lResult = MMC_FAILED;
-		return lResult;
+		LogError("VCS_GetFaultState", success, *pErrorCode);
+		success = false;
+		return success;
 	}
 
 	if(oIsFault)
@@ -464,31 +477,31 @@ int PrepareDemo(DWORD* pErrorCode, WORD nodeId)
 		msg << "clear fault, node = '" << nodeId << "'";
 		LogInfo(msg.str());
 
-		if(!VCS_ClearFault(g_pKeyHandle, nodeId, pErrorCode) )
+		if(!VCS_ClearFault(subkeyHandle, nodeId, pErrorCode) )
 		{
-			LogError("VCS_ClearFault", lResult, *pErrorCode);
-			lResult = MMC_FAILED;
-			return lResult;
+			LogError("VCS_ClearFault", success, *pErrorCode);
+			success = false;
+			return success;
 		}
 	}
 
 	BOOL oIsEnabled = 0;
-	if(!VCS_GetEnableState(g_pKeyHandle, nodeId, &oIsEnabled, pErrorCode) )
+	if(!VCS_GetEnableState(subkeyHandle, nodeId, &oIsEnabled, pErrorCode) )
 	{
-		LogError("VCS_GetEnableState", lResult, *pErrorCode);
-		lResult = MMC_FAILED;
-		return lResult;
+		LogError("VCS_GetEnableState", success, *pErrorCode);
+		success = false;
+		return success;
 	}
 
 	if(!oIsEnabled)
 	{
-		if(VCS_SetEnableState(g_pKeyHandle, nodeId, pErrorCode) == 0)
+		if(VCS_SetEnableState(subkeyHandle, nodeId, pErrorCode) == 0)
 		{
-			LogError("VCS_SetEnableState", lResult, *pErrorCode);
-			lResult = MMC_FAILED;
+			LogError("VCS_SetEnableState", success, *pErrorCode);
+			success = false;
 		}
 	}
-	return lResult;
+	return success;
 }
 
 int MaxFollowingErrorDemo(DWORD& p_rlErrorCode) {
@@ -496,21 +509,21 @@ int MaxFollowingErrorDemo(DWORD& p_rlErrorCode) {
 	const unsigned int EXPECTED_ERROR_CODE = 0x8611;
 	DWORD lDeviceErrorCode = 0;
 
-	lResult = VCS_ActivateProfilePositionMode(g_pKeyHandle, g_usNodeId, &p_rlErrorCode);
+	lResult = VCS_ActivateProfilePositionMode(subkeyHandle, g_usNodeId, &p_rlErrorCode);
 
 	if(lResult)
 	{
-		lResult = VCS_SetMaxFollowingError(g_pKeyHandle, g_usNodeId, 1, &p_rlErrorCode);
+		lResult = VCS_SetMaxFollowingError(subkeyHandle, g_usNodeId, 1, &p_rlErrorCode);
 	}
 
 	if(lResult)
 	{
-		lResult = VCS_MoveToPosition(g_pKeyHandle, g_usNodeId, 1000, 1, 1, &p_rlErrorCode);
+		lResult = VCS_MoveToPosition(subkeyHandle, g_usNodeId, 1000, 1, 1, &p_rlErrorCode);
 	}
 
 	if(lResult)
 	{
-		lResult = VCS_GetDeviceErrorCode(g_pKeyHandle, g_usNodeId, 1, &lDeviceErrorCode, &p_rlErrorCode);
+		lResult = VCS_GetDeviceErrorCode(subkeyHandle, g_usNodeId, 1, &lDeviceErrorCode, &p_rlErrorCode);
 	}
 
 	if(lResult)
@@ -525,21 +538,21 @@ int Demo(DWORD* pErrorCode)
 {
 	int lResult = MMC_SUCCESS;
 
-	lResult = DemoProfileVelocityMode(g_pKeyHandle, g_usNodeId, *pErrorCode);
-	if(lResult != MMC_SUCCESS)
+	lResult = DemoJoystickMode(subkeyHandle, *pErrorCode);
+	if(!lResult)
 	{
 		LogError("DemoProfileVelocityMode", lResult, *pErrorCode);
 		return lResult;
 	}
 
-	lResult = DemoProfilePositionMode(g_pKeyHandle, g_usNodeId, *pErrorCode);
+	lResult = DemoProfilePositionMode(subkeyHandle, g_usNodeId, *pErrorCode);
 	if(lResult != MMC_SUCCESS)
 	{
 		LogError("DemoProfilePositionMode", lResult, *pErrorCode);
 		return lResult;
 	}
 
-	if(VCS_SetDisableState(g_pKeyHandle, g_usNodeId, pErrorCode) == 0)
+	if(VCS_SetDisableState(subkeyHandle, g_usNodeId, pErrorCode) == 0)
 	{
 		LogError("VCS_SetDisableState", lResult, *pErrorCode);
 		lResult = MMC_FAILED;
@@ -624,9 +637,9 @@ int PrintAvailableInterfaces()
 	return lResult;
 }
 
-int PrintDeviceVersion()
+bool PrintDeviceVersion()
 {
-	int lResult = MMC_FAILED;
+	int success = false;
 	unsigned short usHardwareVersion = 0;
 	unsigned short usSoftwareVersion = 0;
 	unsigned short usApplicationNumber = 0;
@@ -637,10 +650,10 @@ int PrintDeviceVersion()
 	{
 		printf("%s Hardware Version    = 0x%04x\n      Software Version    = 0x%04x\n      Application Number  = 0x%04x\n      Application Version = 0x%04x\n",
 				g_deviceName.c_str(), usHardwareVersion, usSoftwareVersion, usApplicationNumber, usApplicationVersion);
-		lResult = MMC_SUCCESS;
+		success = true;
 	}
 
-	return lResult;
+	return success;
 }
 
 int PrintAvailableProtocols()
@@ -680,16 +693,16 @@ int PrintAvailableProtocols()
 
 int main(int argc, char** argv)
 {
-	int lResult = MMC_FAILED;
+	bool success = false;
 	DWORD ulErrorCode = 0;
 
 	PrintHeader();
 
 	SetDefaultParameters();
 
-	if((lResult = ParseArguments(argc, argv))!=MMC_SUCCESS)
+	if( !(success = ParseArguments(argc, argv)) )
 	{
-		return lResult;
+		return success;
 	}
 
 	PrintSettings();
@@ -698,17 +711,22 @@ int main(int argc, char** argv)
 	{
 		case AM_DEMO:
 		{
-			if((lResult = OpenDevice(&ulErrorCode))!=MMC_SUCCESS) {
-				LogError("OpenDevice", lResult, ulErrorCode);
-				return lResult;
+			if( !(success = OpenDevice(&ulErrorCode)) ) {
+				LogError("OpenDevice", success, ulErrorCode);
+				return success;
 			}
 
-			for (size_t i = 0; i < NUM_AXES; i++)
-			{
-				if ((lResult = PrepareDemo(&ulErrorCode, g_usNodeId+i)) != MMC_SUCCESS) {
-					LogError("PrepareDemo", lResult, ulErrorCode);
-					return lResult;
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				if ( !(success = PrepareDemo(&ulErrorCode, 1+i) ) ) {
+					LogError("PrepareDemo", success, ulErrorCode);
+					return success;
 				}
+			}
+
+			success = DemoJoystickMode(subkeyHandle, ulErrorCode);
+			if (!success) {
+				LogError("DemoProfileVelocityMode", success, ulErrorCode);
+				return success;
 			}
 
 			if( !jodoPathDemo(&ulErrorCode) )
@@ -717,10 +735,10 @@ int main(int argc, char** argv)
 				return false;
 			}
 
-			if((lResult = CloseDevice(&ulErrorCode))!=MMC_SUCCESS)
+			if(!(success = CloseDevice(&ulErrorCode)))
 			{
-				LogError("CloseDevice", lResult, ulErrorCode);
-				return lResult;
+				LogError("CloseDevice", success, ulErrorCode);
+				return success;
 			}
 		} break;
 		case AM_INTERFACE_LIST:
@@ -731,22 +749,22 @@ int main(int argc, char** argv)
 			break;
 		case AM_VERSION_INFO:
 		{
-			if((lResult = OpenDevice(&ulErrorCode))!=MMC_SUCCESS)
+			if( !(success = OpenDevice(&ulErrorCode)) )
 			{
-				LogError("OpenDevice", lResult, ulErrorCode);
-				return lResult;
+				LogError("OpenDevice", success, ulErrorCode);
+				return success;
 			}
 
-			if((lResult = PrintDeviceVersion()) != MMC_SUCCESS)
+			if( !(success = PrintDeviceVersion()) )
 		    {
-				LogError("PrintDeviceVersion", lResult, ulErrorCode);
-				return lResult;
+				LogError("PrintDeviceVersion", success, ulErrorCode);
+				return success;
 		    }
 
-			if((lResult = CloseDevice(&ulErrorCode))!=MMC_SUCCESS)
+			if( !(success = CloseDevice(&ulErrorCode)) )
 			{
-				LogError("CloseDevice", lResult, ulErrorCode);
-				return lResult;
+				LogError("CloseDevice", success, ulErrorCode);
+				return success;
 			}
 		} break;
 		case AM_UNKNOWN:
@@ -754,5 +772,5 @@ int main(int argc, char** argv)
 			break;
 	}
 
-	return lResult;
+	return success;
 }

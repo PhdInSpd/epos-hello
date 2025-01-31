@@ -1,0 +1,7 @@
+o	-	add joystick
+o	-	add cmd interface
+		-	joystick jog
+		-	teach points
+		-	execute trajectory
+		-	Manually home unit
+		-	disable/enable drives

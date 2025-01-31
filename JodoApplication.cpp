@@ -194,6 +194,8 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			moveAbs(pDevice, 1 + i);
 		}
+		// only moves unit 1. using key or subkey 
+		//moveAbs(pDevice, 0);
 		auto end = std::chrono::high_resolution_clock::now();
 
 		std::chrono::duration<double> elapsed = end - start;
