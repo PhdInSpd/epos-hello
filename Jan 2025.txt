@@ -1,7 +1,8 @@
-o	-	add joystick
+x	-	add joystick
 o	-	add cmd interface
 		-	joystick jog
 		-	teach points
 		-	execute trajectory
 		-	Manually home unit
 		-	disable/enable drives
+o	-	move to linux
