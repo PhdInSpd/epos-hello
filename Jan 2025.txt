@@ -1,8 +1,9 @@
-x	-	add joystick
+c++ pc program
+x	-	contunuous path trajectory
+x	-	add joystick movement
 o	-	add cmd interface
 		-	joystick jog
 		-	teach points
-		-	execute trajectory
 		-	Manually home unit
 		-	disable/enable drives
 o	-	move to linux
