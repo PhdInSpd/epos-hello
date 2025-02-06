@@ -4,7 +4,7 @@ x	-	add joystick movement
 x	-	add joystick speed select
 o	-	add cmd interface
 x		-	disable/enable drives
-o		-	Manually home unit
+x		-	Manually home unit
 x		-	joystick jog
 		-	teach points recipe
 		-	run continuous trajectory

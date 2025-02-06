@@ -311,6 +311,8 @@ JSResponse runHomeMode(HANDLE pDevice,
 						int axis,
 						DWORD& rErrorCode);
 
+JSResponse forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode);
+
 JSResponse runHomeMode(	HANDLE pDevice,
 						std::string msg,
 						int axis,
@@ -328,8 +330,63 @@ JSResponse runHomeMode(	HANDLE pDevice,
 	if (rsp != ACCEPT) {
 		return rsp;
 	} 
+	rsp = forceHome(pDevice, axis, rErrorCode);
+	return rsp;
+}
+
+JSResponse forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
+{
+	JSResponse rsp = ACCEPT;
 	if (!VCS_ActivateHomingMode(pDevice, 1 + axis, &rErrorCode)) {
 		LogError("VCS_ActivateHomingMode",
+			false,
+			rErrorCode);
+		rsp = JSResponse::FAULT;
+		return rsp;
+	}
+
+
+	DWORD	acceleration,
+		speedSwitch,
+		speedIndex;
+
+	long homeOffset;
+
+	WORD	currentThreshold;
+	long homePos;
+
+
+	if (!VCS_GetHomingParameter(pDevice, 1 + axis,
+		&acceleration,
+		&speedSwitch,
+		&speedIndex,
+		&homeOffset,
+		&currentThreshold,
+		&homePos, &rErrorCode)) {
+		LogError("VCS_GetHomingParameter",
+			false,
+			rErrorCode);
+		rsp = JSResponse::FAULT;
+		return rsp;
+
+	}
+
+
+
+
+	/*if (!VCS_GetPositionIs(pDevice, 1 + axis, &homePos, &rErrorCode)) {
+	LogError("VCS_GetPositionIs",
+	false,
+	rErrorCode);
+	rsp = JSResponse::FAULT;
+	return rsp;
+	}*/
+
+	homePos = 0;
+
+	if (!VCS_SetHomingParameter(pDevice, 1 + axis, acceleration,
+		speedSwitch, speedIndex, homeOffset, currentThreshold, homePos, &rErrorCode)) {
+		LogError("VCS_SetHomingParameter",
 			false,
 			rErrorCode);
 		rsp = JSResponse::FAULT;
@@ -345,6 +402,13 @@ JSResponse runHomeMode(	HANDLE pDevice,
 		return rsp;
 	}
 
+	if (!VCS_WaitForHomingAttained(pDevice, 1 + axis, 100, &rErrorCode)) {
+		LogError("VCS_WaitForHomingAttained",
+			false,
+			rErrorCode);
+		rsp = JSResponse::FAULT;
+		return rsp;
+	}
 	return rsp;
 }
 
