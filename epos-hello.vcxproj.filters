@@ -36,6 +36,9 @@
     <ClCompile Include="testutils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="PLC.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Definitions.h">
@@ -57,6 +60,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="testutils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PLC.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DllTools.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

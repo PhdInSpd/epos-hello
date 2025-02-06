@@ -961,6 +961,12 @@ int demoGameController()
 
     return 0;
 }
+
+bool joystickGetButton(int button) {
+    return (bool)SDL_JoystickGetButton(   SDL_GameControllerGetJoystick(gamecontroller),
+                                          button);
+}
+
 bool getAnalogInputs(float channels[]) {
    
    bool joyConnected = gamecontroller != nullptr;

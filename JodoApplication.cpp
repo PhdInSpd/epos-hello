@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 #include <chrono>
+#include "PLC.h"
 
 
 void LogError(std::string functionName, int p_lResult, unsigned int p_ulErrorCode)
@@ -15,6 +16,13 @@ void LogInfo(std::string message)
 {
 	std::cout << message << std::endl;
 }
+
+/// <summary>
+/// on all drives
+/// </summary>
+/// <param name="keyHandle"></param>
+/// <param name="pErrorCode"></param>
+/// <returns></returns>
 bool disableDrives(HANDLE keyHandle, DWORD* pErrorCode) {
 	bool success = true;
 	for (WORD i = 0; i < NUM_AXES; i++) {
@@ -28,6 +36,12 @@ bool disableDrives(HANDLE keyHandle, DWORD* pErrorCode) {
 	return success;
 }
 
+/// <summary>
+/// on all drives
+/// </summary>
+/// <param name="keyHandle"></param>
+/// <param name="pErrorCode"></param>
+/// <returns></returns>
 bool enableDrives(HANDLE keyHandle, DWORD* pErrorCode) {
 	bool success = true;
 	for (WORD i = 0; i < NUM_AXES; i++)
@@ -43,12 +57,16 @@ bool enableDrives(HANDLE keyHandle, DWORD* pErrorCode) {
 	return success;
 }
 
+/// <summary>
+/// on all drives
+/// </summary>
+/// <param name="keyHandle"></param>
+/// <param name="pErrorCode"></param>
+/// <returns></returns>
 bool haltPositionMovementDrives(HANDLE keyHandle, DWORD* pErrorCode) {
 	bool success = true;
-	for (size_t i = 0; i < NUM_AXES; i++)
-	{
-		if (!VCS_HaltPositionMovement( keyHandle, 1 + i, pErrorCode))
-		{
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		if (!VCS_HaltPositionMovement( keyHandle, 1 + i, pErrorCode)) {
 			LogError("VCS_HaltPositionMovement",
 				false,
 				*pErrorCode);
@@ -58,6 +76,12 @@ bool haltPositionMovementDrives(HANDLE keyHandle, DWORD* pErrorCode) {
 	return success;
 }
 
+/// <summary>
+/// on all drives
+/// </summary>
+/// <param name="keyHandle"></param>
+/// <param name="pErrorCode"></param>
+/// <returns></returns>
 bool activateProfilePositionModeDrives(HANDLE keyHandle, DWORD* pErrorCode) {
 	bool success = true;
 	for (size_t i = 0; i < NUM_AXES; i++) {
@@ -81,8 +105,7 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 
 	LogInfo("set profile position mode");
 
-	if (!(success = activateProfilePositionModeDrives(pDevice, &rErrorCode)))
-	{
+	if (!(success = activateProfilePositionModeDrives(pDevice, &rErrorCode))) {
 		return success;
 	}
 
@@ -114,7 +137,7 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 		}
 
 		double nextDelta[NUM_AXES] = { 0 };
-		bool nextSegmentValid = false;
+		bool nextSegmentContinuous = false;
 		// does next getment exist?
 		if ((point + 1) < noPoints) {
 			for (size_t i = 0; i < NUM_AXES; i++) {
@@ -134,7 +157,7 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 						break;
 					}
 				}
-				nextSegmentValid = signPassed;
+				nextSegmentContinuous = signPassed;
 			}
 		}
 
@@ -175,7 +198,7 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 			}
 		}
 
-		if (nextSegmentValid) {
+		if (nextSegmentContinuous) {
 			for (size_t i = 0; i < NUM_AXES; i++) {
 				setTargetPosition(pDevice, 1 + i, pos[i][point + 1] * scld[i]);
 			}
@@ -190,39 +213,37 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 		// 0:	all axis start move at the same time.
 		//		Only works for unit1
 		// moveRel(pDeviceHandle, 0);
-		auto start = std::chrono::high_resolution_clock::now();
+		double start = SEC_TIME();
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			moveAbs(pDevice, 1 + i);
 		}
 		// only moves unit 1. using key or subkey 
 		//moveAbs(pDevice, 0);
-		auto end = std::chrono::high_resolution_clock::now();
+		double end = SEC_TIME();
 
-		std::chrono::duration<double> elapsed = end - start;
+		double elapsed = end - start;
 		std::stringstream msgMove;
-		msgMove << nextSegmentValid + 1 << "segments = " << elapsed.count();
+		msgMove << nextSegmentContinuous + 1 << "segments = " << elapsed;
 		LogInfo(msgMove.str());
 
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			moveReset(pDevice, 1 + i);
 		}
 
-		if (nextSegmentValid)
-		{
+		if (nextSegmentContinuous) {
 			// wait trigger reached
 			bool triggerReached = true;
 			long cmdPos[NUM_AXES] = { 0 };
 			long triggerPos = pos[0][point] * scld[0];
 
-			do
-			{
+			do {
 				// each getCommandPosition() takes 2.5 ms
-				start = std::chrono::high_resolution_clock::now();
+				start = SEC_TIME();
 				for (size_t i = 0; i < NUM_AXES; i++) {
 					cmdPos[i] = getCommandPosition(pDevice, 1 + i);
 				}
-				end = std::chrono::high_resolution_clock::now();
-				std::chrono::duration<double> elapsed = end - start;
+				end = SEC_TIME();
+				double elapsed = end - start;
 
 				if (delta[0] < 0) {
 					triggerReached = cmdPos[0] <= triggerPos;
@@ -237,29 +258,28 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 			for (size_t i = 0; i < NUM_AXES; i++) {
 				msg << cmdPos[i] << ",";
 			}
-			msg << " :" << elapsed.count();
+			msg << " :" << elapsed;
 			LogInfo(msg.str());
 		}
 		else {
 			// wait target reached
 			bool targetsReached = true;
-			do
-			{
+			do {
 				// each getCommandPosition() takes 2.5 ms
-				start = std::chrono::high_resolution_clock::now();
+				start = SEC_TIME();
 				long cmdPos[NUM_AXES] = { 0 };
 				for (size_t i = 0; i < NUM_AXES; i++) {
 					cmdPos[i] = getCommandPosition(pDevice, 1 + i);
 				}
-				end = std::chrono::high_resolution_clock::now();
-				std::chrono::duration<double> elapsed = end - start;
+				end = SEC_TIME();
+				double elapsed = end - start;
 
 				std::stringstream msg;
 				msg << "cmd position = ";
 				for (size_t i = 0; i < NUM_AXES; i++) {
 					msg << cmdPos[i] << ",";
 				}
-				msg << " :" << elapsed.count();
+				msg << " :" << elapsed;
 				LogInfo(msg.str());
 
 				targetsReached = true;

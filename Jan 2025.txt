@@ -1,9 +1,10 @@
 c++ pc program
 x	-	contunuous path trajectory
 x	-	add joystick movement
+x	-	add joystick speed select
 o	-	add cmd interface
 		-	joystick jog
-		-	teach points
+		-	teach points recipe
 		-	Manually home unit
 		-	disable/enable drives
 o	-	move to linux

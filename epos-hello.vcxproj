@@ -86,7 +86,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CRT_SECURE_NO_WARNINGS;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;EXPORT_DLL;_DEBUG;_CRT_SECURE_NO_WARNINGS;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>./SDL2/include</AdditionalIncludeDirectories>
     </ClCompile>
@@ -148,11 +148,14 @@
     <ClCompile Include="CatheterRobot.cpp" />
     <ClCompile Include="JodoApplication.cpp" />
     <ClCompile Include="JodoCanopenMotion.cpp" />
+    <ClCompile Include="PLC.cpp" />
     <ClCompile Include="Scaling.cpp" />
     <ClCompile Include="testgamecontroller.cpp" />
     <ClCompile Include="testutils.cpp" />
+    <ClInclude Include="DllTools.h" />
     <ClInclude Include="JodoApplication.h" />
     <ClInclude Include="JodoCanopenMotion.h" />
+    <ClInclude Include="PLC.h" />
     <ClInclude Include="Scaling.h" />
     <ClInclude Include="testgamecontroller.h" />
     <ClInclude Include="testutils.h" />

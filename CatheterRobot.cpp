@@ -28,6 +28,7 @@
 #include "JodoCanopenMotion.h"
 #include "JodoApplication.h"
 #include "testgamecontroller.h"
+#include "PLC.h"
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -81,7 +82,7 @@ void  SetDefaultParameters();
 bool  ParseArguments(int argc, char** argv);
 int   DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD& p_rlErrorCode);
 
-int   Demo(DWORD* p_pErrorCode);
+bool   Demo(DWORD* p_pErrorCode);
 bool   PrepareDemo(DWORD* p_pErrorCode, WORD nodeId);
 int   PrintAvailableInterfaces();
 int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
@@ -117,13 +118,34 @@ bool DemoJoystickMode(HANDLE pDevice, const std::vector<bool>& joyEnable, DWORD&
 		}
 	}
 
-	double joyVel[NUM_AXES] = { 0.75,0.125 }; // RPS
-	double joyAccel[NUM_AXES] = {20,10 };     // RPS^2
-	while ( countOn(joyEnable)/*number of axes enabled*/ > 0 && success) {
+	double joySlowVel[NUM_AXES] = { 0.125,	0.125	};	// RPS
+	double joyFastVel[NUM_AXES] = { 0.75,	0.500	};	// RPS
+	double joyAccel[NUM_AXES]	= { 20,		10		};	// RPS^2
+	double * joySelections[2]	= { joySlowVel,		joyFastVel };
+	int joySelection = 0;
+	
+	bool diVelSelect = false;
+	FTrigger ftVel;
+	ftVel.CLK(diVelSelect);
+
+	while (countOn(joyEnable)/*number of axes enabled*/ > 0
+		&& success) {
 		// get joystick left analog 
 		handlelGamecontrollerEvents();
 		float channels[NUM_JOY_CHANNELS] = { 0 };
 		bool connected = getAnalogInputs(channels);
+
+		// get joy home button
+		diVelSelect = joystickGetButton(SDL_CONTROLLER_BUTTON_GUIDE);
+		if (ftVel.CLK(diVelSelect)) {
+			joySelection = !joySelection;
+			if (joySelection) {
+				LogInfo("fast joy");
+			}
+			else {
+				LogInfo("slow joy"); 
+			}
+		}
 
 		for (size_t i = 0; i < NUM_JOY_CHANNELS; i++) {
 			if (fabs(channels[i]) < DEAD_BAND) {
@@ -140,7 +162,7 @@ bool DemoJoystickMode(HANDLE pDevice, const std::vector<bool>& joyEnable, DWORD&
 		// calculate epos velocity
 		int targetVels[NUM_AXES] = { 0 };
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			targetVels[i] = joyMap[i] * sclv[i];
+			targetVels[i] = joyMap[i] * joySelections[joySelection][i]*sclv[i];
 		}
 
 		// set axis joystick
@@ -211,7 +233,7 @@ bool jodoPathDemo(DWORD* pErrorCode) {
 												pathAcceleration,
 												pos,
 												*pErrorCode);
-	if (!success) {
+	if ( !success ) {
 		LogError("jodoDemoProfilePositionMode", success, *pErrorCode);
 		return success;
 	}
@@ -221,7 +243,6 @@ bool jodoPathDemo(DWORD* pErrorCode) {
 	return success;
 }
 /****************************************************************************/
-
 
 void PrintUsage()
 {
@@ -238,19 +259,15 @@ void PrintUsage()
 	std::cout << "\t-v   : display device version" << std::endl;
 }
 
-
-void SeparatorLine()
-{
+void SeparatorLine() {
 	const int lineLength = 65;
-	for(int i=0; i<lineLength; i++)
-	{
+	for(int i=0; i<lineLength; i++) {
 		std::cout << "-";
 	}
 	std::cout << std::endl;
 }
 
-void PrintSettings()
-{
+void PrintSettings() {
 	std::stringstream msg;
 
 	msg << "default settings:" << std::endl;
@@ -266,8 +283,7 @@ void PrintSettings()
 	SeparatorLine();
 }
 
-void SetDefaultParameters()
-{
+void SetDefaultParameters() {
 	//USB
 	g_usNodeId = 1;
 	g_deviceName = "EPOS4"; 
@@ -277,8 +293,7 @@ void SetDefaultParameters()
 	g_baudrate = 1000000; 
 }
 
-int OpenDevice(DWORD* p_pErrorCode)
-{
+int OpenDevice(DWORD* p_pErrorCode) {
 	int success = false;
 
 	char* pDeviceName = new char[255];
@@ -559,34 +574,31 @@ int MaxFollowingErrorDemo(DWORD& p_rlErrorCode) {
 	return lResult;
 }
 
-int Demo(DWORD* pErrorCode)
-{
-	int lResult = MMC_SUCCESS;
+bool Demo(DWORD* pErrorCode) {
+	bool success = true;
 	std::vector<bool> joyEnable;
-	joyEnable.push_back(true);
-	joyEnable.push_back(true);
-
-	lResult = DemoJoystickMode(subkeyHandle, joyEnable, *pErrorCode);
-	if(!lResult)
-	{
-		LogError("DemoProfileVelocityMode", lResult, *pErrorCode);
-		return lResult;
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		joyEnable.push_back(true);
 	}
 
-	lResult = DemoProfilePositionMode(subkeyHandle, g_usNodeId, *pErrorCode);
-	if(lResult != MMC_SUCCESS)
-	{
-		LogError("DemoProfilePositionMode", lResult, *pErrorCode);
-		return lResult;
+	success = DemoJoystickMode(subkeyHandle, joyEnable, *pErrorCode);
+	if(!success) {
+		LogError( "DemoProfileVelocityMode", success, *pErrorCode);
+		return success;
 	}
 
-	if(VCS_SetDisableState(subkeyHandle, g_usNodeId, pErrorCode) == 0)
-	{
-		LogError("VCS_SetDisableState", lResult, *pErrorCode);
-		lResult = MMC_FAILED;
+	success = DemoProfilePositionMode(subkeyHandle, g_usNodeId, *pErrorCode);
+	if( !success ) {
+		LogError("DemoProfilePositionMode", success, *pErrorCode);
+		return success;
 	}
 
-	return lResult;
+	if( !VCS_SetDisableState(subkeyHandle, g_usNodeId, pErrorCode) ) {
+		LogError("VCS_SetDisableState", success, *pErrorCode);
+		success = false;
+	}
+
+	return success;
 }
 
 void PrintHeader()
@@ -734,17 +746,14 @@ int main(int argc, char** argv)
 
 	SetDefaultParameters();
 
-	if( !(success = ParseArguments(argc, argv)) )
-	{
+	if( !(success = ParseArguments(argc, argv)) ) {
 		return success;
 	}
 
 	PrintSettings();
 
-	switch(g_eAppMode)
-	{
-		case AM_DEMO:
-		{
+	switch(g_eAppMode) {
+		case AM_DEMO: {
 			if( !(success = OpenDevice(&ulErrorCode)) ) {
 				LogError("OpenDevice", success, ulErrorCode);
 				return success;
@@ -756,23 +765,23 @@ int main(int argc, char** argv)
 					return success;
 				}
 			}
+
 			std::vector<bool> joyEnable;
-			joyEnable.push_back(true);
-			joyEnable.push_back(true);
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				joyEnable.push_back(true);
+			}
 			success = DemoJoystickMode(subkeyHandle, joyEnable, ulErrorCode);
 			if (!success) {
 				LogError("DemoProfileVelocityMode", success, ulErrorCode);
 				return success;
 			}
 
-			if( !jodoPathDemo(&ulErrorCode) )
-			{
+			if( !jodoPathDemo(&ulErrorCode) ) {
 				LogError("jodoPathDemo", false, ulErrorCode);
 				return false;
 			}
 
-			if(!(success = CloseDevice(&ulErrorCode)))
-			{
+			if(!(success = CloseDevice(&ulErrorCode))) {
 				LogError("CloseDevice", success, ulErrorCode);
 				return success;
 			}
