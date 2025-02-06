@@ -3,6 +3,7 @@ const double AXIS0_REV = 2048 * 4;
 const double AXIS1_REV = 1024 * 4;
 const double GEAR_RATIO_44 = 44;
 
+const int MAX_NUM_AXES = 6;
 const int NUM_AXES = 2;
 
 // convert from revs to encoder count

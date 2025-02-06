@@ -42,6 +42,14 @@ enum EAppMode
 	AM_VERSION_INFO
 };
 
+enum JSResponse {
+	RUNNING,
+	FAULT,
+	ACCEPT,
+	REJECT,
+};
+
+
 void* g_pKeyHandle = 0;
 unsigned short g_usNodeId;
 std::string g_deviceName;
@@ -82,39 +90,49 @@ void  SetDefaultParameters();
 bool  ParseArguments(int argc, char** argv);
 int   DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD& p_rlErrorCode);
 
-bool   Demo(DWORD* p_pErrorCode);
-bool   PrepareDemo(DWORD* p_pErrorCode, WORD nodeId);
+bool  Demo(DWORD* p_pErrorCode);
+bool  PrepareDemo(DWORD* p_pErrorCode, WORD nodeId);
 int   PrintAvailableInterfaces();
 int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
 int	  PrintAvailableProtocols();
-bool   PrintDeviceVersion();
+int main(int argc, char** argv);
+bool  PrintDeviceVersion();
 
 /****************************************************************************/
 /*	jodo application 														*/
-bool DemoJoystickMode(HANDLE pDevice, const std::vector<bool>& joyEnable, DWORD& rErrorCode);
-
-int countOn(const std::vector<bool> & value) {
+int countOn(const std::vector<bool>& value) {
 	int count = std::count_if(
-								value.begin(), value.end(),
-								[](bool in) { return in; }	);
+		value.begin(), value.end(),
+		[](bool in) { return in; });
 	return count;
 }
 
-bool DemoJoystickMode(HANDLE pDevice, const std::vector<bool>& joyEnable, DWORD& rErrorCode) {
+void setAll(std::vector<bool>& value, bool on) {
+	std::fill(value.begin(), value.end(), on);
+}
+
+JSResponse runJoystickMode(		HANDLE pDevice,
+								std::vector<bool>& joyEnable,
+								std::string msg,
+								DWORD& rErrorCode);
+
+JSResponse runJoystickMode(	HANDLE pDevice,
+							std::vector<bool>& joyEnable,
+							std::string msg,
+							DWORD& rErrorCode) {
 	const int NUM_JOY_CHANNELS = 6;
 	const float DEAD_BAND = 0.1;
 
-	bool success = true;
-	std::stringstream msg;
+	JSResponse rsp = JSResponse::REJECT;
 
-	msg << "set profile velocity mode, node = ";
-	LogInfo(msg.str());
+	LogInfo(msg.c_str());
 
 	for (size_t i = 0; i < NUM_AXES; i++) {
 		if (VCS_ActivateProfileVelocityMode(pDevice, 1 + i, &rErrorCode) == 0) {
-			LogError("VCS_ActivateProfileVelocityMode", success, rErrorCode);
-			success = false;
-			return success;
+			LogError("VCS_ActivateProfileVelocityMode", rsp, rErrorCode);
+			setAll(joyEnable, false);
+			rsp = JSResponse::FAULT;
+			return rsp;
 		}
 	}
 
@@ -125,17 +143,32 @@ bool DemoJoystickMode(HANDLE pDevice, const std::vector<bool>& joyEnable, DWORD&
 	int joySelection = 0;
 	
 	bool diVelSelect = false;
-	FTrigger ftVel;
+	FTrigger ftVel, ftAccept, ftReject;
 	ftVel.CLK(diVelSelect);
 
-	while (countOn(joyEnable)/*number of axes enabled*/ > 0
-		&& success) {
+	while (	countOn(joyEnable)/*number of axes enabled*/ > 0) {
 		// get joystick left analog 
 		handlelGamecontrollerEvents();
 		float channels[NUM_JOY_CHANNELS] = { 0 };
 		bool connected = getAnalogInputs(channels);
 
-		// get joy home button
+		// accept?
+		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
+			LogInfo("ACCEPT");
+			setAll(joyEnable, false);
+			rsp = JSResponse::ACCEPT;
+			continue;
+		}
+
+		// reject?
+		if (ftReject.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_B))) {
+			LogInfo("REJECt");
+			setAll(joyEnable, false);
+			rsp = JSResponse::REJECT;
+			continue;
+		}
+
+		// change speed?
 		diVelSelect = joystickGetButton(SDL_CONTROLLER_BUTTON_GUIDE);
 		if (ftVel.CLK(diVelSelect)) {
 			joySelection = !joySelection;
@@ -147,6 +180,7 @@ bool DemoJoystickMode(HANDLE pDevice, const std::vector<bool>& joyEnable, DWORD&
 			}
 		}
 
+		// apply analog deadband
 		for (size_t i = 0; i < NUM_JOY_CHANNELS; i++) {
 			if (fabs(channels[i]) < DEAD_BAND) {
 				channels[i] = 0;
@@ -162,37 +196,159 @@ bool DemoJoystickMode(HANDLE pDevice, const std::vector<bool>& joyEnable, DWORD&
 		// calculate epos velocity
 		int targetVels[NUM_AXES] = { 0 };
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			targetVels[i] = joyMap[i] * joySelections[joySelection][i]*sclv[i];
+			targetVels[i] = joyEnable[i]?
+							joyMap[i] *
+							joySelections[joySelection][i] * 
+							sclv[i]:0;
 		}
 
 		// set axis joystick
 		for (int i = 0; i < NUM_AXES; i++) {
 			if (VCS_MoveWithVelocity(pDevice, 1 + i, targetVels[i], &rErrorCode) == 0) {
-				success = false;
-				LogError("VCS_MoveWithVelocity", success, rErrorCode);
+				rsp = JSResponse::FAULT;
+				LogError("VCS_MoveWithVelocity", rsp, rErrorCode);
+				setAll(joyEnable, false);
 			}
 		}
 		sleep(16); // 60 updates/sec
 	}
 
-	if (success)
-	{
+	if (rsp != FAULT){
 		LogInfo("halt velocity movement");
 
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			if (VCS_HaltVelocityMovement(pDevice, 1 + i, &rErrorCode) == 0) {
-				success = false;
-				LogError("VCS_HaltVelocityMovement", success, rErrorCode);
+				rsp = JSResponse::FAULT;
+				LogError("VCS_HaltVelocityMovement", rsp, rErrorCode);
 			}
 		}
 
 	}
 
-	return success;
+	return rsp;
 }
 
+JSResponse runEnableMode(HANDLE pDevice,
+						std::string msg,
+						DWORD& rErrorCode);
 
-bool jodoPathDemo(DWORD* pErrorCode) {
+JSResponse runEnableMode(HANDLE pDevice,
+						std::string msg,
+						DWORD& rErrorCode) {
+	JSResponse rsp = JSResponse::RUNNING;
+
+	LogInfo(msg.c_str());
+
+	FTrigger ftEnable[NUM_AXES], ftAccept, ftReject;
+	bool buttEnable[MAX_NUM_AXES] = { 0 };
+
+	while (rsp == RUNNING) {
+		// get joystick left analog 
+		handlelGamecontrollerEvents();
+		
+
+		// accept?
+		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
+			LogInfo("ACCEPT");
+			rsp = JSResponse::ACCEPT;
+			continue;
+		}
+
+		// reject?
+		if (ftReject.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_B))) {
+			LogInfo("REJECt");
+			rsp = JSResponse::REJECT;
+			continue;
+		}
+
+		// buttons to AXES
+		buttEnable[0] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+		buttEnable[1] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+		buttEnable[2] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+		buttEnable[3] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_UP);
+		buttEnable[4] = joystickGetButton(SDL_CONTROLLER_BUTTON_BACK);
+		buttEnable[5] = joystickGetButton(SDL_CONTROLLER_BUTTON_START);
+
+
+		// process enable
+		for (int i = 0; i < NUM_AXES; i++) {
+			if ( ftEnable[i].CLK( buttEnable[i] ) ){
+				BOOL isEnabled = false;
+				if (!VCS_GetEnableState(pDevice, 1 + i, &isEnabled,&rErrorCode)) {
+					LogError("VCS_GetEnableState",
+						false,
+						rErrorCode);
+					rsp = JSResponse::FAULT;
+				}
+				if (isEnabled){
+					if (!VCS_SetDisableState(pDevice, 1 + i, &rErrorCode)) {
+						LogError("VCS_SetDisableState",
+							false,
+							rErrorCode);
+						rsp = JSResponse:: FAULT;
+					}
+				}
+				else {
+					if (!VCS_SetEnableState(pDevice, 1 + i, &rErrorCode)) {
+						LogError("VCS_SetEnableState",
+							false,
+							rErrorCode);
+						rsp = JSResponse::FAULT;
+					}
+
+				}
+			}
+			
+		}
+		
+		sleep(16); // 60 updates/sec
+	}
+	return rsp;
+}
+
+JSResponse runHomeMode(HANDLE pDevice,
+						std::string msg,
+						int axis,
+						DWORD& rErrorCode);
+
+JSResponse runHomeMode(	HANDLE pDevice,
+						std::string msg,
+						int axis,
+						DWORD& rErrorCode) {
+	std::vector<bool> joyEnable;
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		joyEnable.push_back(false);
+	}
+	joyEnable[axis] = true;
+	JSResponse rsp = runJoystickMode(	pDevice,
+										joyEnable,
+										msg + std::string("axis: ") + std::to_string(axis),
+										rErrorCode);
+
+	if (rsp != ACCEPT) {
+		return rsp;
+	} 
+	if (!VCS_ActivateHomingMode(pDevice, 1 + axis, &rErrorCode)) {
+		LogError("VCS_ActivateHomingMode",
+			false,
+			rErrorCode);
+		rsp = JSResponse::FAULT;
+		return rsp;
+	}
+
+	int8_t method = HM_ACTUAL_POSITION;
+	if (!VCS_FindHome(pDevice, 1 + axis, method, &rErrorCode)) {
+		LogError("VCS_FindHome",
+			false,
+			rErrorCode);
+		rsp = JSResponse::FAULT;
+		return rsp;
+	}
+
+	return rsp;
+}
+
+bool jodoPathDemo(HANDLE keyHandle, DWORD* pErrorCode) {
 	std::vector<double> pathVelocity;
 	pathVelocity.push_back(1.0);
 	pathVelocity.push_back(0.05);
@@ -228,7 +384,7 @@ bool jodoPathDemo(DWORD* pErrorCode) {
 	pos[1].push_back(0.6f * 2);
 	pos[1].push_back(-0.6f * 2);
 	pos[1].push_back(-2.8f);
-	bool success = jodoContunuousCatheterPath(	subkeyHandle,
+	bool success = jodoContunuousCatheterPath(	keyHandle,
 												pathVelocity,
 												pathAcceleration,
 												pos,
@@ -581,7 +737,7 @@ bool Demo(DWORD* pErrorCode) {
 		joyEnable.push_back(true);
 	}
 
-	success = DemoJoystickMode(subkeyHandle, joyEnable, *pErrorCode);
+	success = runJoystickMode(subkeyHandle, joyEnable,"Accept or reject", * pErrorCode);
 	if(!success) {
 		LogError( "DemoProfileVelocityMode", success, *pErrorCode);
 		return success;
@@ -732,7 +888,6 @@ int PrintAvailableProtocols()
 }
 
 
-
 int main(int argc, char** argv)
 {
 	bool success = false;
@@ -770,13 +925,49 @@ int main(int argc, char** argv)
 			for (size_t i = 0; i < NUM_AXES; i++) {
 				joyEnable.push_back(true);
 			}
-			success = DemoJoystickMode(subkeyHandle, joyEnable, ulErrorCode);
-			if (!success) {
-				LogError("DemoProfileVelocityMode", success, ulErrorCode);
+			JSResponse rsp = runJoystickMode(subkeyHandle,
+											joyEnable,
+											"accet(A) or reject(B)",
+											ulErrorCode);
+
+			if ( !( success = (rsp==ACCEPT) ) ) {
+				LogError("runJoystickMode", success, ulErrorCode);
 				return success;
 			}
 
-			if( !jodoPathDemo(&ulErrorCode) ) {
+			rsp = runEnableMode(subkeyHandle,
+								"Enable/DisabLe left(1) right(2) down(3) up(4) share(5) option(6)",
+								ulErrorCode);
+
+			if (!(success = (rsp == ACCEPT))) {
+				LogError("runEnableMode", success, ulErrorCode);
+				return success;
+			}
+
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				rsp = runHomeMode(subkeyHandle,
+					"Jog to position and Home(A) or skip(B)",
+					i,
+					ulErrorCode);
+				if (!(success = (rsp != FAULT))) {
+					LogError("runHomeMode", success, ulErrorCode);
+					return success;
+				}
+			}
+
+			long finalPos[NUM_AXES] = { 0 };
+			bool gotPos = true;
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				gotPos = VCS_GetPositionIs(subkeyHandle, 1 + i, &finalPos[i], &ulErrorCode) && gotPos;
+			}
+			if (gotPos) {
+				std::stringstream msg;
+				msg << "final position = " << finalPos[0] / scld[0] << "," << finalPos[0] << "," << finalPos[1] / scld[1] << "," << finalPos[1];
+				LogInfo(msg.str());
+			}
+			
+
+			if( !jodoPathDemo(subkeyHandle , &ulErrorCode) ) {
 				LogError("jodoPathDemo", false, ulErrorCode);
 				return false;
 			}
