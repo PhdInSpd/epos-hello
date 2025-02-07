@@ -21,6 +21,8 @@
 #include <stdio.h>
 #include <vector>
 #include <algorithm>
+#include <map>
+
 //#include <sys/times.h>
 //#include <sys/time.h>
 
@@ -30,6 +32,7 @@
 #include "testgamecontroller.h"
 #include "PLC.h"
 #include "TeachData.h"
+#include <functional>
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -246,7 +249,6 @@ JoyRsp runEnableMode(HANDLE pDevice,
 	while (rsp == RUNNING) {
 		// get joystick left analog 
 		handlelGamecontrollerEvents();
-		
 
 		// accept?
 		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
@@ -269,7 +271,6 @@ JoyRsp runEnableMode(HANDLE pDevice,
 		buttEnable[3] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_UP);
 		buttEnable[4] = joystickGetButton(SDL_CONTROLLER_BUTTON_BACK);
 		buttEnable[5] = joystickGetButton(SDL_CONTROLLER_BUTTON_START);
-
 
 		// process enable
 		for (int i = 0; i < NUM_AXES; i++) {
@@ -453,6 +454,7 @@ bool jodoPathDemo(HANDLE keyHandle, DWORD* pErrorCode) {
 	//pos[1].push_back(-0.6f * 2);
 	//pos[1].push_back(-2.8f);
 	std::string filename = "teach-data.xml";
+	//filename = "jodo-teach.xml";
 
 	TeachData data;
 	if (!loadDataFromXML(data, filename)) {
@@ -460,7 +462,7 @@ bool jodoPathDemo(HANDLE keyHandle, DWORD* pErrorCode) {
 		return false;
 	}
 
-	bool success = jodoContunuousCatheterPath(	keyHandle,
+	bool success = jodoContinuousCatheterPath(	keyHandle,
 												data,
 												*pErrorCode);
 	if ( !success ) {
@@ -469,13 +471,70 @@ bool jodoPathDemo(HANDLE keyHandle, DWORD* pErrorCode) {
 	}
 	LogInfo("halt position movement");
 	haltPositionMovementDrives(subkeyHandle, pErrorCode);
-	disableDrives(subkeyHandle, pErrorCode);
+	//disableDrives(keyHandle, pErrorCode);
 	return success;
+}
+
+bool jodoTeach(HANDLE keyHandle, TeachData &teach, double defaultPathVel, DWORD* pErrorCode) {
+
+	
+	
+	JoyRsp rsp = JoyRsp::RUNNING;
+	std::vector<bool> joyEnable;
+	std::string msg = "jog to teach point. accept(A) exit(B)";
+
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		joyEnable.push_back(true);
+	}
+
+	while ( rsp == JoyRsp::RUNNING ) {
+		setAll(joyEnable, true);
+		rsp = runJoystickMode(	keyHandle,
+								joyEnable,
+								msg + "point: " + std::to_string(	  teach.points.size()),
+								*pErrorCode); 
+
+		if (rsp == JoyRsp::ACCEPT) {
+			long teachPos[NUM_AXES] = { 0 };
+			getActualPositionDrives(subkeyHandle, teachPos);
+			double teachPosUserUnits[NUM_AXES] = { 0 };
+			scalePosition(teachPos, teachPosUserUnits);
+			printPosition("teachPos= ", teachPos);
+			printPosition("finalPos user units= ", teachPosUserUnits);
+
+			// add teach point
+			std::vector<double> row;
+			for (size_t i = 0; i < MAX_NUM_AXES; i++) {
+				row.push_back(0);
+			}
+			row.push_back(defaultPathVel);
+
+			// copy position data
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				row[i] = teachPosUserUnits[i];
+			}
+			teach.points.push_back(row);
+			rsp = JoyRsp::RUNNING;
+		}
+	}
+
+	
+	
+	/*success = jodoContunuousCatheterPath(keyHandle,
+										teach,
+										*pErrorCode);
+	if (!success) {
+		LogError("jodoContunuousCatheterPath", success, *pErrorCode);
+		return success;
+	}*/
+	LogInfo("halt position movement");
+	haltPositionMovementDrives(subkeyHandle, pErrorCode);
+	//disableDrives(keyHandle, pErrorCode);
+	return teach.points.size() > 0;
 }
 /****************************************************************************/
 
-void PrintUsage()
-{
+void PrintUsage() {
 	std::cout << "Usage: HelloEposCmd" << std::endl;
 	std::cout << "\t-h : this help" << std::endl;
 	std::cout << "\t-n : node id (default 1)" << std::endl;
@@ -523,60 +582,61 @@ void SetDefaultParameters() {
 	g_baudrate = 1000000; 
 }
 
-int OpenDevice(DWORD* p_pErrorCode) {
+int OpenDevice(DWORD* pErrorCode) {
 	int success = false;
 
-	char* pDeviceName = new char[255];
-	char* pProtocolStackName = new char[255];
-	char* pInterfaceName = new char[255];
-	char* pPortName = new char[255];
+	const int SIZE = 255;
+	char pDeviceName		[SIZE]= {0};
+	char pProtocolStackName [SIZE]= {0};
+	char pInterfaceName		[SIZE]= {0};
+	char pPortName			[SIZE]=	{0};
 
-	strcpy(pDeviceName,  g_deviceName.c_str());
+	strcpy(pDeviceName,			g_deviceName.c_str());
 	strcpy(pProtocolStackName, 	g_protocolStackName.c_str());
 	strcpy(pInterfaceName,	 	g_interfaceName.c_str());
 	strcpy(pPortName,			g_portName.c_str());
 
 	LogInfo("Open device...");
 
-	g_pKeyHandle = VCS_OpenDevice(pDeviceName, pProtocolStackName, pInterfaceName, pPortName, p_pErrorCode);
+	subkeyHandle = 0;
+	g_pKeyHandle = VCS_OpenDevice(	pDeviceName,
+									pProtocolStackName,
+									pInterfaceName,
+									pPortName,
+									pErrorCode);
 
-	if(g_pKeyHandle!=0 && *p_pErrorCode == 0)
-	{
-		DWORD lBaudrate = 0;
-		DWORD lTimeout = 0;
-
-		if(VCS_GetProtocolStackSettings(g_pKeyHandle, &lBaudrate, &lTimeout, p_pErrorCode)!=0) {
-			if(VCS_SetProtocolStackSettings(g_pKeyHandle, g_baudrate, lTimeout, p_pErrorCode)!=0)
-			{
-				if(VCS_GetProtocolStackSettings(g_pKeyHandle, &lBaudrate, &lTimeout, p_pErrorCode)!=0)
-				{
-					if(g_baudrate==(int)lBaudrate)
-					{
-						subkeyHandle = VCS_OpenSubDevice(g_pKeyHandle, (char *)subdeviceName.c_str(), (char*)subprotocolStackName.c_str(), p_pErrorCode);
-						if (subkeyHandle>0) {
-							if (VCS_GetGatewaySettings(g_pKeyHandle, &lBaudrate,  p_pErrorCode) != 0) {
-								printf("Gateway baudrate = %u\r\n", g_baudrate);
-								success = true;
-							}
-
-						}
-
-					}
-				}
-			}
-		}
-	}
-	else
-	{
-		g_pKeyHandle = 0;
-		subkeyHandle = 0;
+	if(g_pKeyHandle==0 || *pErrorCode > 0) {
+		return success;
 	}
 
-	delete []pDeviceName;
-	delete []pProtocolStackName;
-	delete []pInterfaceName;
-	delete []pPortName;
+	DWORD lBaudrate = 0;
+	DWORD lTimeout = 0;
 
+	if ( !VCS_GetProtocolStackSettings(g_pKeyHandle, &lBaudrate, &lTimeout, pErrorCode) ){
+		return success;
+	}
+	if ( !VCS_SetProtocolStackSettings(g_pKeyHandle, g_baudrate, lTimeout, pErrorCode) ) {
+		return success;
+	}
+	if ( !VCS_GetProtocolStackSettings(g_pKeyHandle, &lBaudrate, &lTimeout, pErrorCode) ) {
+		return success;
+	}
+	if (g_baudrate != (int)lBaudrate) {
+		return success;
+	}
+	subkeyHandle = VCS_OpenSubDevice(	g_pKeyHandle,
+										(char*)subdeviceName.c_str(),
+										(char*)subprotocolStackName.c_str(),
+										pErrorCode);
+	if (subkeyHandle == 0) {
+		return success;
+	}
+
+	if (!VCS_GetGatewaySettings(g_pKeyHandle, &lBaudrate, pErrorCode)) {
+		return success;
+	}
+	printf("Gateway baudrate = %u\r\n", g_baudrate);
+	success = true;
 	return success;
 }
 
@@ -961,7 +1021,15 @@ int PrintAvailableProtocols()
 	return lResult;
 }
 
-
+void showRnDMenu() {
+	system("cls");
+	std::cout << "1] disable/enable drive\r\n"
+				 "2] Manually home unit\r\n"
+				 "3] joystick jog.\r\n"
+				 "4] teach points recipe\r\n"
+				 "5] run continuous trajectory\r\n"
+				 "6] exit\r\n\r\n";
+}
 int main(int argc, char** argv) {
 	//xmlWriteReadTest();
 	bool success = false;
@@ -994,51 +1062,106 @@ int main(int argc, char** argv) {
 					return success;
 				}
 			}
+			
+			JoyRsp rsp;
+			bool done = false;
+			std::map<int, std::function<void()>> menuActions = {
+			  {1, [&rsp, &errorCode]() {
+					system("cls");
+					rsp = runEnableMode(subkeyHandle,
+						"Enable/DisabLe left(1) right(2) down(3) up(4) share(5) option(6)",
+						errorCode);
 
-			std::vector<bool> joyEnable;
-			for (size_t i = 0; i < NUM_AXES; i++) {
-				joyEnable.push_back(true);
-			}
-			JoyRsp rsp = runJoystickMode(subkeyHandle,
-											joyEnable,
-											"accet(A) or reject(B)",
-											errorCode);
+					if (!(rsp == ACCEPT)) {
+						LogError("runEnableMode", false, errorCode);
+					};
+				} 
+			  },
+			  {2, [&rsp, &errorCode]() {
+					system("cls");
+					for (size_t i = 0; i < NUM_AXES; i++) {
+						rsp = runHomeMode(subkeyHandle,
+							"Jog to position and Home(A) or skip(B)",
+							i,
+							errorCode);
+						if (!((rsp != FAULT))) {
+							LogError("runHomeMode", false, errorCode);
+						}
+					}
 
-			if ( !( success = (rsp==ACCEPT) ) ) {
-				LogError("runJoystickMode", success, errorCode);
-				return success;
-			}
+					long finalPos[NUM_AXES] = { 0 };
+					getActualPositionDrives(subkeyHandle, finalPos);
+					double finalPosUserUnits[NUM_AXES] = { 0 };
+					scalePosition(finalPos, finalPosUserUnits);
+					printPosition("finalPos= ", finalPos);
+					printPosition("finalPos user units= ", finalPosUserUnits);
+				}
+			  },
+			  {3, [&rsp, &errorCode]() {
+					system("cls");
+					std::vector<bool> joyEnable;
+					for (size_t i = 0; i < NUM_AXES; i++) {
+						joyEnable.push_back(true);
+					}
+					rsp = runJoystickMode(subkeyHandle,
+													joyEnable,
+													"accet(A) or reject(B)",
+													errorCode);
 
-			rsp = runEnableMode(subkeyHandle,
-								"Enable/DisabLe left(1) right(2) down(3) up(4) share(5) option(6)",
-								errorCode);
+					if (!((rsp == ACCEPT))) {
+						LogError("runJoystickMode", false, errorCode);
+					}
+				}
+			  },
+			  {4, [&rsp, &errorCode]() {
+					system("cls");
+					TeachData teach;
+					std::string filename = "jodo-teach.xml";
+					teach.name = filename;
+					teach.pathAcceleration = 20;
+					const double defaultPathVel = 0.5;
 
-			if (! (success = (rsp == ACCEPT) ) ) {
-				LogError("runEnableMode", success, errorCode);
-				return success;
-			}
+					if (!jodoTeach(subkeyHandle, teach, defaultPathVel, &errorCode)) {
+						LogError("jodoTeach", false, errorCode);
+						return;
+					}
 
-			for (size_t i = 0; i < NUM_AXES; i++) {
-				rsp = runHomeMode(subkeyHandle,
-					"Jog to position and Home(A) or skip(B)",
-					i,
-					errorCode);
-				if (!(success = (rsp != FAULT))) {
-					LogError("runHomeMode", success, errorCode);
-					return success;
+					if (teach.points.size() > 0) {
+						if (!saveDataToXML(teach, filename)) {
+							std::cerr << "Error saving data." << std::endl;
+						}
+					}
+				}
+			  },
+			  {5, [&rsp, &errorCode]() {
+					system("cls");
+					if (!jodoPathDemo(subkeyHandle, &errorCode)) {
+						LogError("jodoPathDemo", false, errorCode);
+					}
+				}
+			  },
+			  {6, [&done]() {
+					system("cls");
+					done = true;
+				}
+			  },
+			};
+
+			int menuSelection = 0;
+
+			while (!done) {
+				showRnDMenu();
+				std::cout << "select action: ";
+				std::cin >> menuSelection;
+				if (menuActions.count(menuSelection)) {
+					menuActions[menuSelection](); // Call the associated function
+				}
+				else {
+					std::cout << "No action found." << std::endl;
 				}
 			}
 
-			long finalPos[NUM_AXES] = { 0 };
-			getActualPositionDrives(subkeyHandle, finalPos);
-			double finalPosUserUnits[NUM_AXES] = { 0 };
-			scalePosition(finalPos, finalPosUserUnits);
-			printPosition("finalPos= ", finalPosUserUnits);
-
-			if( !jodoPathDemo(subkeyHandle , &errorCode) ) {
-				LogError("jodoPathDemo", false, errorCode);
-				return false;
-			}
+			
 
 			if(!(success = CloseDevice(&errorCode))) {
 				LogError("CloseDevice", success, errorCode);

@@ -103,7 +103,7 @@ void getActualPositionDrives(HANDLE keyHandle, long pos[]) {
 }
 
 /* continuous path from given profile*/
-bool jodoContunuousCatheterPath(HANDLE pDevice,
+bool jodoContinuousCatheterPath(HANDLE pDevice,
 	const  TeachData & data,
 	DWORD& rErrorCode) {
 	bool success = true;
@@ -144,7 +144,7 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 		double nextDelta[NUM_AXES] = { 0 };
 		bool nextSegmentContinuous = false;
 		// does next getment exist?
-		if ((point + 1) < noPoints) {
+		if ( (point + 1) < noPoints) {
 			for (size_t i = 0; i < NUM_AXES; i++) {
 				nextDelta[i] = data.points[point+1][i] - data.points[point][i];
 			}
@@ -177,6 +177,8 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 		double magnitude = sqrt(magSquared);
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			unitDirection[i] = (long)(delta[i] * scld[i]) != 0 ? delta[i] / magnitude : 1;
+			// If unitdirection is to low the move takes too long
+			unitDirection[i] = fabs(unitDirection[i]) >= 0.001 ?  unitDirection[i]:1;
 		}
 
 		DWORD	profileVelocity[NUM_AXES] = { 0 },

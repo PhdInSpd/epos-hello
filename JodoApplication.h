@@ -37,7 +37,7 @@ bool activateProfilePositionModeDrives(HANDLE keyHandle, DWORD* pErrorCode);
 
 /************************************************************/
 /* continuous path from given profile*/
-bool jodoContunuousCatheterPath(HANDLE pDevice,
+bool jodoContinuousCatheterPath(HANDLE pDevice,
 								const  TeachData& data,
 								DWORD& rErrorCode);
 /*****************************************************************/
