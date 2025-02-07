@@ -29,6 +29,7 @@
 #include "JodoApplication.h"
 #include "testgamecontroller.h"
 #include "PLC.h"
+#include "read-xml.cpp"
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -42,7 +43,7 @@ enum EAppMode
 	AM_VERSION_INFO
 };
 
-enum JSResponse {
+enum JoyRsp {
 	RUNNING,
 	FAULT,
 	ACCEPT,
@@ -111,19 +112,19 @@ void setAll(std::vector<bool>& value, bool on) {
 	std::fill(value.begin(), value.end(), on);
 }
 
-JSResponse runJoystickMode(		HANDLE pDevice,
+JoyRsp runJoystickMode(		HANDLE pDevice,
 								std::vector<bool>& joyEnable,
 								std::string msg,
 								DWORD& rErrorCode);
 
-JSResponse runJoystickMode(	HANDLE pDevice,
+JoyRsp runJoystickMode(	HANDLE pDevice,
 							std::vector<bool>& joyEnable,
 							std::string msg,
 							DWORD& rErrorCode) {
 	const int NUM_JOY_CHANNELS = 6;
 	const float DEAD_BAND = 0.1;
 
-	JSResponse rsp = JSResponse::REJECT;
+	JoyRsp rsp = JoyRsp::REJECT;
 
 	LogInfo(msg.c_str());
 
@@ -131,7 +132,7 @@ JSResponse runJoystickMode(	HANDLE pDevice,
 		if (VCS_ActivateProfileVelocityMode(pDevice, 1 + i, &rErrorCode) == 0) {
 			LogError("VCS_ActivateProfileVelocityMode", rsp, rErrorCode);
 			setAll(joyEnable, false);
-			rsp = JSResponse::FAULT;
+			rsp = JoyRsp::FAULT;
 			return rsp;
 		}
 	}
@@ -156,7 +157,7 @@ JSResponse runJoystickMode(	HANDLE pDevice,
 		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
 			LogInfo("ACCEPT");
 			setAll(joyEnable, false);
-			rsp = JSResponse::ACCEPT;
+			rsp = JoyRsp::ACCEPT;
 			continue;
 		}
 
@@ -164,7 +165,7 @@ JSResponse runJoystickMode(	HANDLE pDevice,
 		if (ftReject.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_B))) {
 			LogInfo("REJECt");
 			setAll(joyEnable, false);
-			rsp = JSResponse::REJECT;
+			rsp = JoyRsp::REJECT;
 			continue;
 		}
 
@@ -205,7 +206,7 @@ JSResponse runJoystickMode(	HANDLE pDevice,
 		// set axis joystick
 		for (int i = 0; i < NUM_AXES; i++) {
 			if (VCS_MoveWithVelocity(pDevice, 1 + i, targetVels[i], &rErrorCode) == 0) {
-				rsp = JSResponse::FAULT;
+				rsp = JoyRsp::FAULT;
 				LogError("VCS_MoveWithVelocity", rsp, rErrorCode);
 				setAll(joyEnable, false);
 			}
@@ -218,7 +219,7 @@ JSResponse runJoystickMode(	HANDLE pDevice,
 
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			if (VCS_HaltVelocityMovement(pDevice, 1 + i, &rErrorCode) == 0) {
-				rsp = JSResponse::FAULT;
+				rsp = JoyRsp::FAULT;
 				LogError("VCS_HaltVelocityMovement", rsp, rErrorCode);
 			}
 		}
@@ -228,14 +229,14 @@ JSResponse runJoystickMode(	HANDLE pDevice,
 	return rsp;
 }
 
-JSResponse runEnableMode(HANDLE pDevice,
+JoyRsp runEnableMode(HANDLE pDevice,
 						std::string msg,
 						DWORD& rErrorCode);
 
-JSResponse runEnableMode(HANDLE pDevice,
+JoyRsp runEnableMode(HANDLE pDevice,
 						std::string msg,
 						DWORD& rErrorCode) {
-	JSResponse rsp = JSResponse::RUNNING;
+	JoyRsp rsp = JoyRsp::RUNNING;
 
 	LogInfo(msg.c_str());
 
@@ -250,14 +251,14 @@ JSResponse runEnableMode(HANDLE pDevice,
 		// accept?
 		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
 			LogInfo("ACCEPT");
-			rsp = JSResponse::ACCEPT;
+			rsp = JoyRsp::ACCEPT;
 			continue;
 		}
 
 		// reject?
 		if (ftReject.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_B))) {
 			LogInfo("REJECt");
-			rsp = JSResponse::REJECT;
+			rsp = JoyRsp::REJECT;
 			continue;
 		}
 
@@ -278,14 +279,14 @@ JSResponse runEnableMode(HANDLE pDevice,
 					LogError("VCS_GetEnableState",
 						false,
 						rErrorCode);
-					rsp = JSResponse::FAULT;
+					rsp = JoyRsp::FAULT;
 				}
 				if (isEnabled){
 					if (!VCS_SetDisableState(pDevice, 1 + i, &rErrorCode)) {
 						LogError("VCS_SetDisableState",
 							false,
 							rErrorCode);
-						rsp = JSResponse:: FAULT;
+						rsp = JoyRsp:: FAULT;
 					}
 				}
 				else {
@@ -293,7 +294,7 @@ JSResponse runEnableMode(HANDLE pDevice,
 						LogError("VCS_SetEnableState",
 							false,
 							rErrorCode);
-						rsp = JSResponse::FAULT;
+						rsp = JoyRsp::FAULT;
 					}
 
 				}
@@ -306,14 +307,14 @@ JSResponse runEnableMode(HANDLE pDevice,
 	return rsp;
 }
 
-JSResponse runHomeMode(HANDLE pDevice,
+JoyRsp runHomeMode(HANDLE pDevice,
 						std::string msg,
 						int axis,
 						DWORD& rErrorCode);
 
-JSResponse forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode);
+JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode);
 
-JSResponse runHomeMode(	HANDLE pDevice,
+JoyRsp runHomeMode(	HANDLE pDevice,
 						std::string msg,
 						int axis,
 						DWORD& rErrorCode) {
@@ -322,7 +323,7 @@ JSResponse runHomeMode(	HANDLE pDevice,
 		joyEnable.push_back(false);
 	}
 	joyEnable[axis] = true;
-	JSResponse rsp = runJoystickMode(	pDevice,
+	JoyRsp rsp = runJoystickMode(	pDevice,
 										joyEnable,
 										msg + std::string("axis: ") + std::to_string(axis),
 										rErrorCode);
@@ -334,14 +335,14 @@ JSResponse runHomeMode(	HANDLE pDevice,
 	return rsp;
 }
 
-JSResponse forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
+JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
 {
-	JSResponse rsp = ACCEPT;
+	JoyRsp rsp = ACCEPT;
 	if (!VCS_ActivateHomingMode(pDevice, 1 + axis, &rErrorCode)) {
 		LogError("VCS_ActivateHomingMode",
 			false,
 			rErrorCode);
-		rsp = JSResponse::FAULT;
+		rsp = JoyRsp::FAULT;
 		return rsp;
 	}
 
@@ -366,7 +367,7 @@ JSResponse forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
 		LogError("VCS_GetHomingParameter",
 			false,
 			rErrorCode);
-		rsp = JSResponse::FAULT;
+		rsp = JoyRsp::FAULT;
 		return rsp;
 
 	}
@@ -389,7 +390,7 @@ JSResponse forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
 		LogError("VCS_SetHomingParameter",
 			false,
 			rErrorCode);
-		rsp = JSResponse::FAULT;
+		rsp = JoyRsp::FAULT;
 		return rsp;
 	}
 
@@ -398,7 +399,7 @@ JSResponse forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
 		LogError("VCS_FindHome",
 			false,
 			rErrorCode);
-		rsp = JSResponse::FAULT;
+		rsp = JoyRsp::FAULT;
 		return rsp;
 	}
 
@@ -406,7 +407,7 @@ JSResponse forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
 		LogError("VCS_WaitForHomingAttained",
 			false,
 			rErrorCode);
-		rsp = JSResponse::FAULT;
+		rsp = JoyRsp::FAULT;
 		return rsp;
 	}
 	return rsp;
@@ -954,8 +955,9 @@ int PrintAvailableProtocols()
 
 int main(int argc, char** argv)
 {
+	xmlWriteReadTest();
 	bool success = false;
-	DWORD ulErrorCode = 0;
+	DWORD errorCode = 0;
 
 	if (!initializeGamecontroller()) {
 		return 1;
@@ -973,14 +975,14 @@ int main(int argc, char** argv)
 
 	switch(g_eAppMode) {
 		case AM_DEMO: {
-			if( !(success = OpenDevice(&ulErrorCode)) ) {
-				LogError("OpenDevice", success, ulErrorCode);
+			if( !(success = OpenDevice(&errorCode)) ) {
+				LogError("OpenDevice", success, errorCode);
 				return success;
 			}
 
 			for (size_t i = 0; i < NUM_AXES; i++) {
-				if ( !(success = PrepareDemo(&ulErrorCode, 1+i) ) ) {
-					LogError("PrepareDemo", success, ulErrorCode);
+				if ( !(success = PrepareDemo(&errorCode, 1+i) ) ) {
+					LogError("PrepareDemo", success, errorCode);
 					return success;
 				}
 			}
@@ -989,22 +991,22 @@ int main(int argc, char** argv)
 			for (size_t i = 0; i < NUM_AXES; i++) {
 				joyEnable.push_back(true);
 			}
-			JSResponse rsp = runJoystickMode(subkeyHandle,
+			JoyRsp rsp = runJoystickMode(subkeyHandle,
 											joyEnable,
 											"accet(A) or reject(B)",
-											ulErrorCode);
+											errorCode);
 
 			if ( !( success = (rsp==ACCEPT) ) ) {
-				LogError("runJoystickMode", success, ulErrorCode);
+				LogError("runJoystickMode", success, errorCode);
 				return success;
 			}
 
 			rsp = runEnableMode(subkeyHandle,
 								"Enable/DisabLe left(1) right(2) down(3) up(4) share(5) option(6)",
-								ulErrorCode);
+								errorCode);
 
 			if (!(success = (rsp == ACCEPT))) {
-				LogError("runEnableMode", success, ulErrorCode);
+				LogError("runEnableMode", success, errorCode);
 				return success;
 			}
 
@@ -1012,9 +1014,9 @@ int main(int argc, char** argv)
 				rsp = runHomeMode(subkeyHandle,
 					"Jog to position and Home(A) or skip(B)",
 					i,
-					ulErrorCode);
+					errorCode);
 				if (!(success = (rsp != FAULT))) {
-					LogError("runHomeMode", success, ulErrorCode);
+					LogError("runHomeMode", success, errorCode);
 					return success;
 				}
 			}
@@ -1022,7 +1024,7 @@ int main(int argc, char** argv)
 			long finalPos[NUM_AXES] = { 0 };
 			bool gotPos = true;
 			for (size_t i = 0; i < NUM_AXES; i++) {
-				gotPos = VCS_GetPositionIs(subkeyHandle, 1 + i, &finalPos[i], &ulErrorCode) && gotPos;
+				gotPos = VCS_GetPositionIs(subkeyHandle, 1 + i, &finalPos[i], &errorCode) && gotPos;
 			}
 			if (gotPos) {
 				std::stringstream msg;
@@ -1031,13 +1033,13 @@ int main(int argc, char** argv)
 			}
 			
 
-			if( !jodoPathDemo(subkeyHandle , &ulErrorCode) ) {
-				LogError("jodoPathDemo", false, ulErrorCode);
+			if( !jodoPathDemo(subkeyHandle , &errorCode) ) {
+				LogError("jodoPathDemo", false, errorCode);
 				return false;
 			}
 
-			if(!(success = CloseDevice(&ulErrorCode))) {
-				LogError("CloseDevice", success, ulErrorCode);
+			if(!(success = CloseDevice(&errorCode))) {
+				LogError("CloseDevice", success, errorCode);
 				return success;
 			}
 		} break;
@@ -1049,21 +1051,21 @@ int main(int argc, char** argv)
 			break;
 		case AM_VERSION_INFO:
 		{
-			if( !(success = OpenDevice(&ulErrorCode)) )
+			if( !(success = OpenDevice(&errorCode)) )
 			{
-				LogError("OpenDevice", success, ulErrorCode);
+				LogError("OpenDevice", success, errorCode);
 				return success;
 			}
 
 			if( !(success = PrintDeviceVersion()) )
 		    {
-				LogError("PrintDeviceVersion", success, ulErrorCode);
+				LogError("PrintDeviceVersion", success, errorCode);
 				return success;
 		    }
 
-			if( !(success = CloseDevice(&ulErrorCode)) )
+			if( !(success = CloseDevice(&errorCode)) )
 			{
-				LogError("CloseDevice", success, ulErrorCode);
+				LogError("CloseDevice", success, errorCode);
 				return success;
 			}
 		} break;
