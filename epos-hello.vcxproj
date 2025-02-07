@@ -163,6 +163,7 @@
     <ClInclude Include="Scaling.h" />
     <ClInclude Include="testgamecontroller.h" />
     <ClInclude Include="testutils.h" />
+    <ClInclude Include="xml-test.h" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Definitions.h" />

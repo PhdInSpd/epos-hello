@@ -662,9 +662,7 @@ static void showSensorData(SDL_GameController * gamepad)
     SDL_Log(text);
 }
 
-
-static void showExtraButtons()
-{
+void showExtraButtons() {
     if (SDL_JoystickGetButton(SDL_GameControllerGetJoystick(gamecontroller), SDL_CONTROLLER_BUTTON_PADDLE1)) {
         SDL_Log("PADDLE1\r\n");
     }

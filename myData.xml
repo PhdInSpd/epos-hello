@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<MyData>
+	<name>John Doe</name>
+	<points>
+		<point>1</point>
+		<point>2.5</point>
+		<point>3.7</point>
+		<point>4.2</point>
+	</points>
+	<age>30</age>
+	<address>123 Main St, Anytown</address>
+</MyData>

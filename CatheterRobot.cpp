@@ -29,7 +29,7 @@
 #include "JodoApplication.h"
 #include "testgamecontroller.h"
 #include "PLC.h"
-#include "read-xml.cpp"
+#include "xml-test.h"
 
 typedef void* HANDLE;
 typedef int BOOL;
