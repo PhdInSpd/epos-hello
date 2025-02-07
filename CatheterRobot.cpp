@@ -29,7 +29,7 @@
 #include "JodoApplication.h"
 #include "testgamecontroller.h"
 #include "PLC.h"
-#include "xml-test.h"
+#include "TeachData.h"
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -92,7 +92,7 @@ bool  ParseArguments(int argc, char** argv);
 int   DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD& p_rlErrorCode);
 
 bool  Demo(DWORD* p_pErrorCode);
-bool  PrepareDemo(DWORD* p_pErrorCode, WORD nodeId);
+bool  clearFaultsAndEnable(DWORD* p_pErrorCode, WORD nodeId);
 int   PrintAvailableInterfaces();
 int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
 int	  PrintAvailableProtocols();
@@ -414,45 +414,54 @@ JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
 }
 
 bool jodoPathDemo(HANDLE keyHandle, DWORD* pErrorCode) {
-	std::vector<double> pathVelocity;
-	pathVelocity.push_back(1.0);
-	pathVelocity.push_back(0.05);
-	pathVelocity.push_back(0.1);
-	pathVelocity.push_back(0.15);
-	pathVelocity.push_back(0.2);
-	pathVelocity.push_back(0.25);
-	pathVelocity.push_back(0.30);
-	pathVelocity.push_back(0.35);
-	pathVelocity.push_back(0.40);
 
-	//(REVSm / sec)/sec
-	double pathAcceleration = 20;
-	std::vector<double> pos[NUM_AXES];
+	////(REVSm / sec)/sec
+	//double pathAcceleration = 20;
 
-	// units in motor revs
-	pos[0].push_back(0.0f);
-	pos[0].push_back(0.2f);
-	pos[0].push_back(0.5f);
-	pos[0].push_back(0.7f);
-	pos[0].push_back(1.0f);
-	pos[0].push_back(1.3f);
-	pos[0].push_back(1.7f);
-	pos[0].push_back(1.7f);
-	pos[0].push_back(1.7f);
+	//std::vector<double> pathVelocity;
+	//pathVelocity.push_back(1.0);
+	//pathVelocity.push_back(0.05);
+	//pathVelocity.push_back(0.1);
+	//pathVelocity.push_back(0.15);
+	//pathVelocity.push_back(0.2);
+	//pathVelocity.push_back(0.25);
+	//pathVelocity.push_back(0.30);
+	//pathVelocity.push_back(0.35);
+	//pathVelocity.push_back(0.40);
 
-	pos[1].push_back(0.0f);
-	pos[1].push_back(0.1f * 2);
-	pos[1].push_back(0.2f * 2);
-	pos[1].push_back(0.3f * 2);
-	pos[1].push_back(0.4f * 2);
-	pos[1].push_back(-0.5f * 2);
-	pos[1].push_back(0.6f * 2);
-	pos[1].push_back(-0.6f * 2);
-	pos[1].push_back(-2.8f);
+	//
+	//std::vector<double> pos[NUM_AXES];
+
+	//// units in motor revs
+	//pos[0].push_back(0.0f);
+	//pos[0].push_back(0.2f);
+	//pos[0].push_back(0.5f);
+	//pos[0].push_back(0.7f);
+	//pos[0].push_back(1.0f);
+	//pos[0].push_back(1.3f);
+	//pos[0].push_back(1.7f);
+	//pos[0].push_back(1.7f);
+	//pos[0].push_back(1.7f);
+
+	//pos[1].push_back(0.0f);
+	//pos[1].push_back(0.1f * 2.0f);
+	//pos[1].push_back(0.2f * 2);
+	//pos[1].push_back(0.3f * 2);
+	//pos[1].push_back(0.4f * 2);
+	//pos[1].push_back(-0.5f * 2);
+	//pos[1].push_back(0.6f * 2);
+	//pos[1].push_back(-0.6f * 2);
+	//pos[1].push_back(-2.8f);
+	std::string filename = "teach-data.xml";
+
+	TeachData data;
+	if (!loadDataFromXML(data, filename)) {
+		std::cerr << "Error loading data." << std::endl;
+		return false;
+	}
+
 	bool success = jodoContunuousCatheterPath(	keyHandle,
-												pathVelocity,
-												pathAcceleration,
-												pos,
+												data,
 												*pErrorCode);
 	if ( !success ) {
 		LogError("jodoDemoProfilePositionMode", success, *pErrorCode);
@@ -720,7 +729,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 	return lResult;
 }
 
-bool PrepareDemo(DWORD* pErrorCode, WORD nodeId)
+bool clearFaultsAndEnable(DWORD* pErrorCode, WORD nodeId)
 {
 	bool success = true;
 	BOOL oIsFault = 0;
@@ -953,9 +962,8 @@ int PrintAvailableProtocols()
 }
 
 
-int main(int argc, char** argv)
-{
-	xmlWriteReadTest();
+int main(int argc, char** argv) {
+	//xmlWriteReadTest();
 	bool success = false;
 	DWORD errorCode = 0;
 
@@ -981,7 +989,7 @@ int main(int argc, char** argv)
 			}
 
 			for (size_t i = 0; i < NUM_AXES; i++) {
-				if ( !(success = PrepareDemo(&errorCode, 1+i) ) ) {
+				if ( !(success = clearFaultsAndEnable(&errorCode, 1+i) ) ) {
 					LogError("PrepareDemo", success, errorCode);
 					return success;
 				}
@@ -1005,7 +1013,7 @@ int main(int argc, char** argv)
 								"Enable/DisabLe left(1) right(2) down(3) up(4) share(5) option(6)",
 								errorCode);
 
-			if (!(success = (rsp == ACCEPT))) {
+			if (! (success = (rsp == ACCEPT) ) ) {
 				LogError("runEnableMode", success, errorCode);
 				return success;
 			}
@@ -1022,16 +1030,10 @@ int main(int argc, char** argv)
 			}
 
 			long finalPos[NUM_AXES] = { 0 };
-			bool gotPos = true;
-			for (size_t i = 0; i < NUM_AXES; i++) {
-				gotPos = VCS_GetPositionIs(subkeyHandle, 1 + i, &finalPos[i], &errorCode) && gotPos;
-			}
-			if (gotPos) {
-				std::stringstream msg;
-				msg << "final position = " << finalPos[0] / scld[0] << "," << finalPos[0] << "," << finalPos[1] / scld[1] << "," << finalPos[1];
-				LogInfo(msg.str());
-			}
-			
+			getActualPositionDrives(subkeyHandle, finalPos);
+			double finalPosUserUnits[NUM_AXES] = { 0 };
+			scalePosition(finalPos, finalPosUserUnits);
+			printPosition("finalPos= ", finalPosUserUnits);
 
 			if( !jodoPathDemo(subkeyHandle , &errorCode) ) {
 				LogError("jodoPathDemo", false, errorCode);

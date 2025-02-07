@@ -13,3 +13,5 @@ extern double scld[NUM_AXES];
 extern double sclv[NUM_AXES];
 // convert from revs/sec^2 to acceleration count (REVSm/min)/sec
 extern double scla[NUM_AXES];
+
+void scalePosition(long input[], double output[]);

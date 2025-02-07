@@ -10,3 +10,23 @@ x		-	joystick jog
 		-	run continuous trajectory
 		-	run stop trajectory
 o	-	move to linux
+
+n my header file I define
+template <typename T> 
+void printPosition(std::string show, T pos[]);
+
+in my CPP file I define
+template <typename T>
+void printPosition(std::string show, T pos[]) {
+	std::stringstream msg;
+	msg << show;
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		msg << pos[i] / scld[i] << ",";
+	}
+	LogInfo(msg.str());
+}
+
+I am getting a link error
+Severity	Code	Description	Project	File	Line	Suppression State
+Error	LNK2019	unresolved external symbol "void __cdecl printPosition<double>(class std::basic_string<char,struct std::char_traits<char>,class std::allocator<char> >,double * const)" (??$printPosition@N@@YAXV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@QAN@Z) referenced in function _main	epos-hello	C:\Program Files (x86)\maxon motor ag\EPOS IDX\EPOS4\04 Programming\Windows DLL\Microsoft Visual C++\HelloEposCmd\CatheterRobot.obj	1	
+

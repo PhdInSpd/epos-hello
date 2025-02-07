@@ -150,7 +150,7 @@
     <ClCompile Include="JodoCanopenMotion.cpp" />
     <ClCompile Include="PLC.cpp" />
     <ClCompile Include="pugixml\pugixml.cpp" />
-    <ClCompile Include="read-xml.cpp" />
+    <ClCompile Include="TeachData.cpp" />
     <ClCompile Include="Scaling.cpp" />
     <ClCompile Include="testgamecontroller.cpp" />
     <ClCompile Include="testutils.cpp" />
@@ -163,7 +163,7 @@
     <ClInclude Include="Scaling.h" />
     <ClInclude Include="testgamecontroller.h" />
     <ClInclude Include="testutils.h" />
-    <ClInclude Include="xml-test.h" />
+    <ClInclude Include="TeachData.h" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Definitions.h" />

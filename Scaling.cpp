@@ -6,3 +6,9 @@ double scld[NUM_AXES] = { AXIS0_REV, AXIS1_REV * GEAR_RATIO_44 };
 double sclv[NUM_AXES] = { 60.0 * 10000.0, GEAR_RATIO_44 * 60 * 10000.0 };
 // convert from revs/sec^2 to acceleration count (REVSm/min)/sec
 double scla[NUM_AXES] = { 60.0, GEAR_RATIO_44 * 60.0 };
+
+void scalePosition(long input[], double output[]) {
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		output[i] = input[i] / scld[i];
+	}
+}

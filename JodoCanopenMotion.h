@@ -15,6 +15,7 @@ enum PPMMask
 };
 bool  getTargetReached(HANDLE deviceHandle, unsigned short nodeId);
 long  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId);
+long  getActualPosition(HANDLE deviceHandle, unsigned short nodeId);
 int	  getTargetPosition(HANDLE deviceHandle, unsigned short nodeId);
 void  setTargetPosition(HANDLE deviceHandle, unsigned short nodeId, int target);
 WORD  getControlword(HANDLE deviceHandle, unsigned short nodeId);

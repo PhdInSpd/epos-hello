@@ -5,6 +5,7 @@
 #include <sstream>
 #include <chrono>
 #include "PLC.h"
+#include "TeachData.h"
 
 
 void LogError(std::string functionName, int p_lResult, unsigned int p_ulErrorCode)
@@ -95,11 +96,15 @@ bool activateProfilePositionModeDrives(HANDLE keyHandle, DWORD* pErrorCode) {
 	return success;
 }
 
+void getActualPositionDrives(HANDLE keyHandle, long pos[]) {
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		pos[i] = getActualPosition(keyHandle, 1 + i);
+	}
+}
+
 /* continuous path from given profile*/
 bool jodoContunuousCatheterPath(HANDLE pDevice,
-	const  std::vector<double>& pathVelocity,	// (REVSm / sec)
-	const double& pathAcceleration,
-	const std::vector<double> pos[NUM_AXES],
+	const  TeachData & data,
 	DWORD& rErrorCode) {
 	bool success = true;
 
@@ -111,22 +116,22 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 
 	double unitDirection[NUM_AXES] = { 0 };
 
-	int noPoints = pos[0].size();
+	int noPoints = data.points.size();
 	for (size_t point = 0; point < noPoints; point++) {
 		double startPos[NUM_AXES] = { 0 };
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			startPos[i] = point == 0 ?
 				getCommandPosition(pDevice, 1 + i) / scld[i] :
 				//getCommandPosition(pDevice, 1 + i) / scld[i];
-				pos[i][point - 1];
+				data.points[point - 1][i];
 		}
 
 		double delta[NUM_AXES] = { 0 };
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			delta[i] = pos[i][point] - startPos[i];
+			delta[i] = data.points[point][i] - startPos[i];
 		}
 
-		// results has zero magnitude and invalid unitDirection
+		// results with zero magnitude are invalid unitDirection
 		int faildedDelta = 0;
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			faildedDelta += (long)(delta[i] * scld[i]) == 0 ? 1 : 0;
@@ -141,7 +146,7 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 		// does next getment exist?
 		if ((point + 1) < noPoints) {
 			for (size_t i = 0; i < NUM_AXES; i++) {
-				nextDelta[i] = pos[i][point + 1] - pos[i][point];
+				nextDelta[i] = data.points[point+1][i] - data.points[point][i];
 			}
 			faildedDelta = 0;
 			for (size_t i = 0; i < NUM_AXES; i++) {
@@ -179,9 +184,10 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 			profileDeceleration[NUM_AXES] = { 0 };
 
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			profileVelocity[i] = fabs((double)(pathVelocity[point] * sclv[i] * unitDirection[i]));
-			profileAcceleration[i] = fabs((double)(pathAcceleration * scla[i] * unitDirection[i]));
-			profileDeceleration[i] = fabs((double)(pathAcceleration * scla[i] * unitDirection[i]));
+			int last = data.points[point].size() - 1;
+			profileVelocity[i] = fabs((double)(data.points[point][last] * sclv[i] * unitDirection[i]));
+			profileAcceleration[i] = fabs((double)(data.pathAcceleration * scla[i] * unitDirection[i]));
+			profileDeceleration[i] = fabs((double)(data.pathAcceleration * scla[i] * unitDirection[i]));
 		}
 
 		for (size_t i = 0; i < NUM_AXES; i++) {
@@ -200,12 +206,12 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 
 		if (nextSegmentContinuous) {
 			for (size_t i = 0; i < NUM_AXES; i++) {
-				setTargetPosition(pDevice, 1 + i, pos[i][point + 1] * scld[i]);
+				setTargetPosition(pDevice, 1 + i, data.points[point + 1][i] * scld[i]);
 			}
 		}
 		else {
 			for (size_t i = 0; i < NUM_AXES; i++) {
-				setTargetPosition(pDevice, 1 + i, pos[i][point] * scld[i]);
+				setTargetPosition(pDevice, 1 + i, data.points[point][i] * scld[i]);
 			}
 		}
 
@@ -234,7 +240,7 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 			// wait trigger reached
 			bool triggerReached = true;
 			long cmdPos[NUM_AXES] = { 0 };
-			long triggerPos = pos[0][point] * scld[0];
+			long triggerPos = data.points[point][0] * scld[0];
 
 			do {
 				// each getCommandPosition() takes 2.5 ms
@@ -291,15 +297,11 @@ bool jodoContunuousCatheterPath(HANDLE pDevice,
 		}
 
 		long finalPos[NUM_AXES] = { 0 };
-		bool gotPos = true;
-		for (size_t i = 0; i < NUM_AXES; i++) {
-			gotPos = VCS_GetPositionIs(pDevice, 1 + i, &finalPos[i], &rErrorCode) && gotPos;
-		}
-		if (gotPos) {
-			std::stringstream msg;
-			msg << "final position = " << finalPos[0] / scld[0] << "," << finalPos[0] << "," << finalPos[1] / scld[1] << "," << finalPos[1];
-			LogInfo(msg.str());
-		}
+		getActualPositionDrives(pDevice, finalPos);
+		double finalPosUserUnits[NUM_AXES] = { 0 };
+		scalePosition(finalPos, finalPosUserUnits);
+		printPosition("finalPosUI= ", finalPosUserUnits);
+		printPosition("finalPoI= ", finalPos);
 		sleep(1);
 	}
 	return success;

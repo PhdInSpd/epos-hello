@@ -39,7 +39,7 @@
     <ClCompile Include="PLC.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="read-xml.cpp">
+    <ClCompile Include="TeachData.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="pugixml\pugixml.cpp">
@@ -80,7 +80,7 @@
     <ClInclude Include="pugixml\pugixml.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="xml-test.h">
+    <ClInclude Include="TeachData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

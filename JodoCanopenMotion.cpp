@@ -129,3 +129,16 @@ long  getCommandPosition(HANDLE deviceHandle, unsigned short nodeId) {
 	return cmdPos;
 }
 
+long  getActualPosition(HANDLE deviceHandle, unsigned short nodeId) {
+	DWORD errorCode = 0;
+	long actualPos = 0;
+	bool success = VCS_GetPositionIs(deviceHandle,
+									nodeId,
+									&actualPos,
+									&errorCode);
+	if (!success)
+	{
+		throw errorCode;
+	}
+	return actualPos;
+}
