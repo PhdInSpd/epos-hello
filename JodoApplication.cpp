@@ -264,9 +264,9 @@ bool jodoContinuousCatheterPath(HANDLE pDevice,
 			std::stringstream msg;
 			msg << " trigger done: cmdPos = ";
 			for (size_t i = 0; i < NUM_AXES; i++) {
-				msg << cmdPos[i] << ",";
+				msg << cmdPos[i] << "\t";
 			}
-			msg << " :" << elapsed;
+			msg <<  elapsed;
 			LogInfo(msg.str());
 		}
 		else {
@@ -283,11 +283,11 @@ bool jodoContinuousCatheterPath(HANDLE pDevice,
 				double elapsed = end - start;
 
 				std::stringstream msg;
-				msg << "cmd position = ";
+				msg << "cmdPos= ";
 				for (size_t i = 0; i < NUM_AXES; i++) {
-					msg << cmdPos[i] << ",";
+					msg << cmdPos[i] << "\t";
 				}
-				msg << " :" << elapsed;
+				msg <<  elapsed;
 				LogInfo(msg.str());
 
 				targetsReached = true;

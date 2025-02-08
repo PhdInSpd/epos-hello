@@ -26,7 +26,7 @@ void printPosition(std::string show, T pos[]) {
 	std::stringstream msg;
 	msg << show;
 	for (size_t i = 0; i < NUM_AXES; i++) {
-		msg << pos[i] / scld[i] << ",";
+		msg << pos[i] / scld[i] << "\t";
 	}
 	LogInfo(msg.str());
 }

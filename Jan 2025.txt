@@ -8,6 +8,8 @@ x		-	Manually home unit
 x		-	joystick jog
 x		-	teach points recipe
 x		-	run continuous trajectory
+		-	fix recipe selection
 		-	run stop trajectory
+		-	display enc pos
 o	-	move to linux
 

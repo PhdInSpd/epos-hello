@@ -4,39 +4,48 @@
 	<pathAcceleration>20.000000</pathAcceleration>
 	<points>
 		<row>
-			<point>-0.043457</point>
-			<point>-0.11615</point>
-			<point>0</point>
-			<point>0</point>
-			<point>0</point>
-			<point>0</point>
+			<point>-3.88406e-05</point>
+			<point>0.0026911</point>
+			<point>0.00109863</point>
+			<point>1.6646e-05</point>
+			<point>0.060791</point>
+			<point>0.0726318</point>
 			<point>0.5</point>
 		</row>
 		<row>
-			<point>-0.0820312</point>
-			<point>-0.15949</point>
-			<point>0</point>
-			<point>0</point>
-			<point>0</point>
-			<point>0</point>
+			<point>-3.32919e-05</point>
+			<point>0.00274658</point>
+			<point>0.00109863</point>
+			<point>1.6646e-05</point>
+			<point>0.0997314</point>
+			<point>0.132324</point>
 			<point>0.5</point>
 		</row>
 		<row>
-			<point>-0.124268</point>
-			<point>-0.201505</point>
-			<point>0</point>
-			<point>0</point>
-			<point>0</point>
-			<point>0</point>
+			<point>-3.32919e-05</point>
+			<point>0.0028631</point>
+			<point>0.00110418</point>
+			<point>2.21946e-05</point>
+			<point>0.217773</point>
+			<point>0.297241</point>
 			<point>0.5</point>
 		</row>
 		<row>
-			<point>-0.161865</point>
-			<point>-0.23625</point>
-			<point>0</point>
-			<point>0</point>
-			<point>0</point>
-			<point>0</point>
+			<point>-3.88406e-05</point>
+			<point>0.00335693</point>
+			<point>0.00109863</point>
+			<point>1.6646e-05</point>
+			<point>0.567017</point>
+			<point>0.696045</point>
+			<point>0.5</point>
+		</row>
+		<row>
+			<point>-2.21946e-05</point>
+			<point>0.00344571</point>
+			<point>0.00109863</point>
+			<point>5.54865e-06</point>
+			<point>0.771118</point>
+			<point>0.895752</point>
 			<point>0.5</point>
 		</row>
 	</points>

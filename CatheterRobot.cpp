@@ -5,13 +5,12 @@
 // Copyright   : maxon motor ag 2014-2021
 // Description : Hello Epos in C++
 //============================================================================
-#include <chrono>
 #include <iostream>
-#include "Definitions.h"
+#include <limits>
+#include <chrono>
 #include <string.h>
 #include <sstream>
-// #include <unistd.h>
- #include "getopt.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <list>
@@ -25,14 +24,18 @@
 
 //#include <sys/times.h>
 //#include <sys/time.h>
+#include <functional>
 
+#include "Definitions.h"
+#undef max // Undefine the max macro
+// #include <unistd.h>
+#include "getopt.h"
 #include "Scaling.h"
 #include "JodoCanopenMotion.h"
 #include "JodoApplication.h"
 #include "testgamecontroller.h"
 #include "PLC.h"
 #include "TeachData.h"
-#include <functional>
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -140,9 +143,9 @@ JoyRsp runJoystickMode(	HANDLE pDevice,
 		}
 	}
 
-	double joySlowVel[NUM_AXES] = { 0.125,	0.125	};	// RPS
-	double joyFastVel[NUM_AXES] = { 0.75,	0.500	};	// RPS
-	double joyAccel[NUM_AXES]	= { 20,		10		};	// RPS^2
+	double joySlowVel[MAX_NUM_AXES] = { .050,	.050,	.050,	.050, 	.050,	.050, };	// RPS
+	double joyFastVel[MAX_NUM_AXES] = { .150,	.150, 	.150,	.150, .150,	.150, };	// RPS
+	double joyAccel[MAX_NUM_AXES]	= { 20,		20,		20,		20,		20,		20, };	// RPS^2
 	double * joySelections[2]	= { joySlowVel,		joyFastVel };
 	int joySelection = 0;
 	
@@ -156,6 +159,10 @@ JoyRsp runJoystickMode(	HANDLE pDevice,
 		float channels[NUM_JOY_CHANNELS] = { 0 };
 		bool connected = getAnalogInputs(channels);
 
+		bool axis4AI = joystickGetButton(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+		bool axis5AI = joystickGetButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+		channels[4] = axis4AI ? -1 : channels[4];
+		channels[5] = axis5AI ? -1 : channels[5];
 		// accept?
 		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
 			LogInfo("ACCEPT");
@@ -454,7 +461,7 @@ bool jodoPathDemo(HANDLE keyHandle, DWORD* pErrorCode) {
 	//pos[1].push_back(-0.6f * 2);
 	//pos[1].push_back(-2.8f);
 	std::string filename = "teach-data.xml";
-	//filename = "jodo-teach.xml";
+filename = "jodo-teach.xml";
 
 	TeachData data;
 	if (!loadDataFromXML(data, filename)) {
@@ -1152,6 +1159,10 @@ int main(int argc, char** argv) {
 			while (!done) {
 				showRnDMenu();
 				std::cout << "select action: ";
+				// Clear the input buffer
+				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+				
+
 				std::cin >> menuSelection;
 				if (menuActions.count(menuSelection)) {
 					menuActions[menuSelection](); // Call the associated function
@@ -1161,7 +1172,7 @@ int main(int argc, char** argv) {
 				}
 			}
 
-			
+			disableDrives(subkeyHandle, &errorCode);
 
 			if(!(success = CloseDevice(&errorCode))) {
 				LogError("CloseDevice", success, errorCode);
