@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sstream>
 
+#include <conio.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <list>
@@ -36,6 +37,7 @@
 #include "testgamecontroller.h"
 #include "PLC.h"
 #include "TeachData.h"
+#include "RecipeRead.h"
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -421,7 +423,7 @@ JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
 	return rsp;
 }
 
-bool jodoPathDemo(HANDLE keyHandle, DWORD* pErrorCode) {
+bool jodoPathDemo(HANDLE keyHandle, std::string & recipeSelection, DWORD* pErrorCode) {
 
 	////(REVSm / sec)/sec
 	//double pathAcceleration = 20;
@@ -460,11 +462,9 @@ bool jodoPathDemo(HANDLE keyHandle, DWORD* pErrorCode) {
 	//pos[1].push_back(0.6f * 2);
 	//pos[1].push_back(-0.6f * 2);
 	//pos[1].push_back(-2.8f);
-	std::string filename = "teach-data.xml";
-filename = "jodo-teach.xml";
 
 	TeachData data;
-	if (!loadDataFromXML(data, filename)) {
+	if (!loadDataFromXML(data, recipeSelection)) {
 		std::cerr << "Error loading data." << std::endl;
 		return false;
 	}
@@ -1037,25 +1037,104 @@ void showRnDMenu() {
 				 "5] run continuous trajectory\r\n"
 				 "6] exit\r\n\r\n";
 }
-int main(int argc, char** argv) {
-	//xmlWriteReadTest();
-	bool success = false;
-	DWORD errorCode = 0;
 
+
+std::string selectMenu(std::string header, int &selectedOption, std::vector<std::string> menuOptions) {
+	; // Initialize selection to the first option
+	bool update = true;
+	FTrigger ftUp, ftDown, ftEnter;
+	while (true) {
+		if (update) {
+			// Clear the console (Windows-specific)
+			system("cls");
+
+			// Display the menu with highlighting
+			std::cout << header;
+			for (size_t i = 0; i < menuOptions.size(); ++i) {
+				if (i == selectedOption) {
+					std::cout << "\033[1;32m"; // Green highlight (ANSI escape codes)
+					std::cout << "> "; // Add a selection indicator
+				}
+				std::cout << i + 1 << "] " << menuOptions[i] << std::endl;
+
+				if (i == selectedOption) {
+					std::cout << "\033[0m"; // Reset color
+				}
+			}
+			update = false;
+		}
+		
+		handlelGamecontrollerEvents();
+
+		// Get character input without echoing to the console
+		int ch = -1;
+		if (_kbhit()){
+			ch = _getch();
+			update = true;
+		}
+
+		// translate to keybord input
+		if (ftDown.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN))){
+			ch = 80;
+			update = true;
+		}
+		if (ftUp.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_UP))) {
+			ch = 72;
+			update = true;
+		}
+		if (ftEnter.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
+			ch = 13;
+			update = true;
+		}
+
+		switch (ch) {
+		case 72: // Up arrow key
+			selectedOption = (selectedOption - 1 + menuOptions.size()) % menuOptions.size();
+			break;
+		case 80: // Down arrow key
+			selectedOption = (selectedOption + 1) % menuOptions.size();
+			break;
+		case 13: // Enter key
+			return	menuOptions[selectedOption];
+		}
+		sleep(2);
+	}
+}
+
+
+int main(int argc, char** argv) {
 	if (!initializeGamecontroller()) {
 		return 1;
 	}
+	// read a list of recipe files
+	const std::string g_recipeDir = "./recipes/";
+	namespace fs = std::filesystem;
+	bool found = fs::exists(g_recipeDir) && fs::is_directory(g_recipeDir);
+
+	if (!found) {
+		fs::create_directory(g_recipeDir);
+	}
+	std::vector<std::string> recipes = readRecipeFiles(g_recipeDir);
+
+	if (recipes.size()==0){
+		std::cout << "no recipes selected\r\n"; 
+		return 1;
+	}
+	int recipeSelection = 0;
+	
 
 	PrintHeader();
 
 	SetDefaultParameters();
 
+	bool success = false;
 	if( !(success = ParseArguments(argc, argv)) ) {
 		return success;
 	}
 
 	PrintSettings();
 
+	DWORD errorCode = 0;
 	switch(g_eAppMode) {
 		case AM_DEMO: {
 			if( !(success = OpenDevice(&errorCode)) ) {
@@ -1070,12 +1149,20 @@ int main(int argc, char** argv) {
 				}
 			}
 			
-			JoyRsp rsp;
+			#pragma region map menu string to action
 			bool done = false;
-			std::map<int, std::function<void()>> menuActions = {
-			  {1, [&rsp, &errorCode]() {
+			std::vector<std::string> actions = {
+				"disable/enable drive"	   ,
+				"Manually home unit"	   ,
+				"joystick jog."			   ,
+				"teach points recipe"	   ,
+				"run continuous trajectory",
+				"exit"					   ,
+			};
+			std::map<std::string, std::function<void()>> menuActions = {
+			  {actions[0], [&errorCode]() {
 					system("cls");
-					rsp = runEnableMode(subkeyHandle,
+					JoyRsp rsp = runEnableMode(subkeyHandle,
 						"Enable/DisabLe left(1) right(2) down(3) up(4) share(5) option(6)",
 						errorCode);
 
@@ -1084,11 +1171,11 @@ int main(int argc, char** argv) {
 					};
 				} 
 			  },
-			  {2, [&rsp, &errorCode]() {
+			  {actions[1], [ &errorCode]() {
 					system("cls");
 					for (size_t i = 0; i < NUM_AXES; i++) {
-						rsp = runHomeMode(subkeyHandle,
-							"Jog to position and Home(A) or skip(B)",
+						JoyRsp rsp = runHomeMode(subkeyHandle,
+							"Jog to position and home(A) or skip(B)",
 							i,
 							errorCode);
 						if (!((rsp != FAULT))) {
@@ -1104,13 +1191,13 @@ int main(int argc, char** argv) {
 					printPosition("finalPos user units= ", finalPosUserUnits);
 				}
 			  },
-			  {3, [&rsp, &errorCode]() {
+			  {actions[2], [ &errorCode]() {
 					system("cls");
 					std::vector<bool> joyEnable;
 					for (size_t i = 0; i < NUM_AXES; i++) {
 						joyEnable.push_back(true);
 					}
-					rsp = runJoystickMode(subkeyHandle,
+					JoyRsp rsp = runJoystickMode(subkeyHandle,
 													joyEnable,
 													"accet(A) or reject(B)",
 													errorCode);
@@ -1120,11 +1207,25 @@ int main(int argc, char** argv) {
 					}
 				}
 			  },
-			  {4, [&rsp, &errorCode]() {
+			{actions[3], [&errorCode, &recipes, &g_recipeDir]() {
 					system("cls");
+					std::string filename;
+					std::cout << "enter teach file name\n";
+					std::cin >> filename;
+					
+					// Basic validation (you can customize this further):
+					if (filename.empty()) {
+						std::cout << "File name cannot be empty." << std::endl;
+						return;
+					}
+					else if (filename.find_first_of(" \t\n\r\f\v\\/*?\"<>|:") != std::string::npos) { // Check for invalid characters
+						std::cout << "Invalid characters in file name (spaces, backslashes, etc.)." << std::endl;
+						return;
+					}
+					
 					TeachData teach;
-					std::string filename = "jodo-teach.xml";
-					teach.name = filename;
+					std::string fullFilename = g_recipeDir + filename;
+					teach.name = fullFilename;
 					teach.pathAcceleration = 20;
 					const double defaultPathVel = 0.5;
 
@@ -1134,42 +1235,40 @@ int main(int argc, char** argv) {
 					}
 
 					if (teach.points.size() > 0) {
-						if (!saveDataToXML(teach, filename)) {
+						if (!saveDataToXML(teach, fullFilename)) {
 							std::cerr << "Error saving data." << std::endl;
+							return;
 						}
+						recipes = readRecipeFiles(g_recipeDir);
 					}
 				}
 			  },
-			  {5, [&rsp, &errorCode]() {
-					system("cls");
-					if (!jodoPathDemo(subkeyHandle, &errorCode)) {
+			  {actions[4], [ &errorCode , &recipeSelection, &recipes]() {
+					std::string selectedRecipe = selectMenu(
+									"\nuse arrow key to select recipe\n"
+									"press enter for final selection :\n",
+									recipeSelection,
+									recipes);
+					if (!jodoPathDemo(subkeyHandle, selectedRecipe, &errorCode)) {
 						LogError("jodoPathDemo", false, errorCode);
 					}
 				}
 			  },
-			  {6, [&done]() {
+			  {actions[5], [&done]() {
 					system("cls");
 					done = true;
 				}
 			  },
 			};
-
-			int menuSelection = 0;
-
+			#pragma endregion
+			int actionSelection = 0;
 			while (!done) {
-				showRnDMenu();
-				std::cout << "select action: ";
-				// Clear the input buffer
-				std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-				
-
-				std::cin >> menuSelection;
-				if (menuActions.count(menuSelection)) {
-					menuActions[menuSelection](); // Call the associated function
-				}
-				else {
-					std::cout << "No action found." << std::endl;
-				}
+				std::string selectedAction = selectMenu(
+					"\nuse arrow key to select action\n"
+					"press enter for final selection :\n",
+					actionSelection,
+					actions);
+				menuActions[selectedAction](); // Call the associated function
 			}
 
 			disableDrives(subkeyHandle, &errorCode);
@@ -1187,20 +1286,17 @@ int main(int argc, char** argv) {
 			break;
 		case AM_VERSION_INFO:
 		{
-			if( !(success = OpenDevice(&errorCode)) )
-			{
+			if( !(success = OpenDevice(&errorCode)) ){
 				LogError("OpenDevice", success, errorCode);
 				return success;
 			}
 
-			if( !(success = PrintDeviceVersion()) )
-		    {
+			if( !(success = PrintDeviceVersion()) ){
 				LogError("PrintDeviceVersion", success, errorCode);
 				return success;
 		    }
 
-			if( !(success = CloseDevice(&errorCode)) )
-			{
+			if( !(success = CloseDevice(&errorCode)) ){
 				LogError("CloseDevice", success, errorCode);
 				return success;
 			}

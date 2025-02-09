@@ -151,6 +151,7 @@
     <ClCompile Include="JodoCanopenMotion.cpp" />
     <ClCompile Include="PLC.cpp" />
     <ClCompile Include="pugixml\pugixml.cpp" />
+    <ClCompile Include="RecipeRead.cpp" />
     <ClCompile Include="TeachData.cpp" />
     <ClCompile Include="Scaling.cpp" />
     <ClCompile Include="testgamecontroller.cpp" />
@@ -161,6 +162,7 @@
     <ClInclude Include="PLC.h" />
     <ClInclude Include="pugixml\pugiconfig.hpp" />
     <ClInclude Include="pugixml\pugixml.hpp" />
+    <ClInclude Include="RecipeRead.h" />
     <ClInclude Include="Scaling.h" />
     <ClInclude Include="testgamecontroller.h" />
     <ClInclude Include="testutils.h" />

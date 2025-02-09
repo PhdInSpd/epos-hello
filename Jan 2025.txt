@@ -8,8 +8,11 @@ x		-	Manually home unit
 x		-	joystick jog
 x		-	teach points recipe
 x		-	run continuous trajectory
-		-	fix recipe selection
-		-	run stop trajectory
+x		-	joystick to select menu item
+x		-	fix recipe selection
+		-	run stop trajectory.
+			-	sync move to stored point
+			-	jog	
+			-	move using stored profile delta
 		-	display enc pos
 o	-	move to linux
-
