@@ -51,14 +51,6 @@ enum EAppMode
 	AM_VERSION_INFO
 };
 
-enum JoyRsp {
-	RUNNING,
-	FAULT,
-	ACCEPT,
-	REJECT,
-};
-
-
 void* g_pKeyHandle = 0;
 unsigned short g_usNodeId;
 std::string g_deviceName;
@@ -105,141 +97,14 @@ int   PrintAvailableInterfaces();
 int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
 int	  PrintAvailableProtocols();
 int main(int argc, char** argv);
+bool isFilenameValid(const std::string& filename);
 bool  PrintDeviceVersion();
 
 /****************************************************************************/
 /*	jodo application 														*/
-int countOn(const std::vector<bool>& value) {
-	int count = std::count_if(
-		value.begin(), value.end(),
-		[](bool in) { return in; });
-	return count;
-}
 
-void setAll(std::vector<bool>& value, bool on) {
-	std::fill(value.begin(), value.end(), on);
-}
 
-JoyRsp runJoystickMode(		HANDLE pDevice,
-								std::vector<bool>& joyEnable,
-								std::string msg,
-								DWORD& rErrorCode);
 
-JoyRsp runJoystickMode(	HANDLE pDevice,
-							std::vector<bool>& joyEnable,
-							std::string msg,
-							DWORD& rErrorCode) {
-	const int NUM_JOY_CHANNELS = 6;
-	const float DEAD_BAND = 0.1;
-
-	JoyRsp rsp = JoyRsp::REJECT;
-
-	LogInfo(msg.c_str());
-
-	for (size_t i = 0; i < NUM_AXES; i++) {
-		if (VCS_ActivateProfileVelocityMode(pDevice, 1 + i, &rErrorCode) == 0) {
-			LogError("VCS_ActivateProfileVelocityMode", rsp, rErrorCode);
-			setAll(joyEnable, false);
-			rsp = JoyRsp::FAULT;
-			return rsp;
-		}
-	}
-
-	double joySlowVel[MAX_NUM_AXES] = { .050,	.050,	.050,	.050, 	.050,	.050, };	// RPS
-	double joyFastVel[MAX_NUM_AXES] = { .150,	.150, 	.150,	.150, .150,	.150, };	// RPS
-	double joyAccel[MAX_NUM_AXES]	= { 20,		20,		20,		20,		20,		20, };	// RPS^2
-	double * joySelections[2]	= { joySlowVel,		joyFastVel };
-	int joySelection = 0;
-	
-	bool diVelSelect = false;
-	FTrigger ftVel, ftAccept, ftReject;
-	ftVel.CLK(diVelSelect);
-
-	while (	countOn(joyEnable)/*number of axes enabled*/ > 0) {
-		// get joystick left analog 
-		handlelGamecontrollerEvents();
-		float channels[NUM_JOY_CHANNELS] = { 0 };
-		bool connected = getAnalogInputs(channels);
-
-		bool axis4AI = joystickGetButton(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-		bool axis5AI = joystickGetButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
-		channels[4] = axis4AI ? -1 : channels[4];
-		channels[5] = axis5AI ? -1 : channels[5];
-		// accept?
-		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
-			LogInfo("ACCEPT");
-			setAll(joyEnable, false);
-			rsp = JoyRsp::ACCEPT;
-			continue;
-		}
-
-		// reject?
-		if (ftReject.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_B))) {
-			LogInfo("REJECt");
-			setAll(joyEnable, false);
-			rsp = JoyRsp::REJECT;
-			continue;
-		}
-
-		// change speed?
-		diVelSelect = joystickGetButton(SDL_CONTROLLER_BUTTON_GUIDE);
-		if (ftVel.CLK(diVelSelect)) {
-			joySelection = !joySelection;
-			if (joySelection) {
-				LogInfo("fast joy");
-			}
-			else {
-				LogInfo("slow joy"); 
-			}
-		}
-
-		// apply analog deadband
-		for (size_t i = 0; i < NUM_JOY_CHANNELS; i++) {
-			if (fabs(channels[i]) < DEAD_BAND) {
-				channels[i] = 0;
-			}
-		}
-		
-		// map joy to controller axes
-		float joyMap[NUM_JOY_CHANNELS] = { 0 };
-		for (size_t i = 0; i < NUM_AXES; i++) {
-			joyMap[i] = channels[i];
-		}
-
-		// calculate epos velocity
-		int targetVels[NUM_AXES] = { 0 };
-		for (size_t i = 0; i < NUM_AXES; i++) {
-			targetVels[i] = joyEnable[i]?
-							joyMap[i] *
-							joySelections[joySelection][i] * 
-							sclv[i]:0;
-		}
-
-		// set axis joystick
-		for (int i = 0; i < NUM_AXES; i++) {
-			if (VCS_MoveWithVelocity(pDevice, 1 + i, targetVels[i], &rErrorCode) == 0) {
-				rsp = JoyRsp::FAULT;
-				LogError("VCS_MoveWithVelocity", rsp, rErrorCode);
-				setAll(joyEnable, false);
-			}
-		}
-		sleep(16); // 60 updates/sec
-	}
-
-	if (rsp != FAULT){
-		LogInfo("halt velocity movement");
-
-		for (size_t i = 0; i < NUM_AXES; i++) {
-			if (VCS_HaltVelocityMovement(pDevice, 1 + i, &rErrorCode) == 0) {
-				rsp = JoyRsp::FAULT;
-				LogError("VCS_HaltVelocityMovement", rsp, rErrorCode);
-			}
-		}
-
-	}
-
-	return rsp;
-}
 
 JoyRsp runEnableMode(HANDLE pDevice,
 						std::string msg,
@@ -1193,10 +1058,7 @@ int main(int argc, char** argv) {
 			  },
 			  {actions[2], [ &errorCode]() {
 					system("cls");
-					std::vector<bool> joyEnable;
-					for (size_t i = 0; i < NUM_AXES; i++) {
-						joyEnable.push_back(true);
-					}
+					std::vector<bool> joyEnable( NUM_AXES,true);
 					JoyRsp rsp = runJoystickMode(subkeyHandle,
 													joyEnable,
 													"accet(A) or reject(B)",
@@ -1213,13 +1075,7 @@ int main(int argc, char** argv) {
 					std::cout << "enter teach file name\n";
 					std::cin >> filename;
 					
-					// Basic validation (you can customize this further):
-					if (filename.empty()) {
-						std::cout << "File name cannot be empty." << std::endl;
-						return;
-					}
-					else if (filename.find_first_of(" \t\n\r\f\v\\/*?\"<>|:") != std::string::npos) { // Check for invalid characters
-						std::cout << "Invalid characters in file name (spaces, backslashes, etc.)." << std::endl;
+					if (isFilenameValid(filename)) {
 						return;
 					}
 					
@@ -1239,6 +1095,7 @@ int main(int argc, char** argv) {
 							std::cerr << "Error saving data." << std::endl;
 							return;
 						}
+						// update list of files
 						recipes = readRecipeFiles(g_recipeDir);
 					}
 				}
@@ -1307,4 +1164,16 @@ int main(int argc, char** argv) {
 	}
 	closeGamecontroller();
 	return success;
+}
+
+bool isFilenameValid(const std::string& filename){
+
+	if (filename.empty()) {
+		return false;
+	}
+	
+	if (filename.find_first_of(" \t\n\r\f\v\\/*?\"<>|:") != std::string::npos) { // Check for invalid characters
+		return false;
+	}
+	return true;
 }
