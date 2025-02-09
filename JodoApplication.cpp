@@ -543,25 +543,49 @@ bool jodoJogCatheterPath(HANDLE pDevice,
 				return success;
 			}
 		}
+		double start = 0;
+		double end = 0;
+		double elapsed = 0;
 
-		// set endPoint
-		int endPoint = point;
-		for (size_t i = 0; i < NUM_AXES; i++) {
-			setTargetPosition(pDevice, 1 + i, data.points[endPoint][i] * scld[i]);
-		}
+		if (point==0) {
+			// set endPoint
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				setTargetPosition(pDevice, 1 + i, data.points[point][i] * scld[i]);
+			}
 
-		// 0:	all axis start move at the same time.
-		//		Only works for unit1
-		// moveRel(pDeviceHandle, 0);
-		double start = SEC_TIME();
-		for (size_t i = 0; i < NUM_AXES; i++) {
-			moveAbs(pDevice, 1 + i);
-		}
-		// only moves unit 1. using key or subkey 
+			// 0:	all axis start move at the same time.
+			//		Only works for unit1
+			// moveRel(pDeviceHandle, 0);
+			start = SEC_TIME();
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				moveAbs(pDevice, 1 + i);
+			}
+			// only moves unit 1. using key or subkey 
 		//moveAbs(pDevice, 0);
-		double end = SEC_TIME();
+			end = SEC_TIME();
+			elapsed = end - start;
+		}
+		else {
+			// set endPoint
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				setTargetPosition(pDevice, 1 + i, delta[i] * scld[i]);
+			}
 
-		double elapsed = end - start;
+			// 0:	all axis start move at the same time.
+			//		Only works for unit1
+			// moveRel(pDeviceHandle, 0);
+			start = SEC_TIME();
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				moveRel(pDevice, 1 + i);
+			}
+			// only moves unit 1. using key or subkey 
+		//moveAbs(pDevice, 0);
+			end = SEC_TIME();
+			elapsed = end - start;
+
+		}
+		
+		
 
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			moveReset(pDevice, 1 + i);
