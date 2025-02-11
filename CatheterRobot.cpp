@@ -966,7 +966,19 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
 	}
 }
 
-
+std::string yesNoUpdateProfile() {
+	static int selection = 0;
+	std::vector<std::string> profileActions = {
+				"yes"	   ,
+				"no"	   ,
+	};
+	std::string selectedAction = selectMenu(
+		"\nupdate recipe profile\n"
+		"press enter for final selection :\n",
+		selection,
+		profileActions);
+	return selectedAction;
+}
 int main(int argc, char** argv) {
 	if (!initializeGamecontroller()) {
 		return 1;
@@ -1022,6 +1034,7 @@ int main(int argc, char** argv) {
 				"joystick jog."			   ,
 				"teach points recipe"	   ,
 				"run continuous trajectory",
+				"run jog trajectory"	   ,
 				"exit"					   ,
 			};
 			std::map<std::string, std::function<void()>> menuActions = {
@@ -1100,7 +1113,7 @@ int main(int argc, char** argv) {
 					}
 				}
 			  },
-			  {actions[4], [ &errorCode , &recipeSelection, &recipes]() {
+			 {actions[4], [ &errorCode , &recipeSelection, &recipes]() {
 					std::string selectedRecipe = selectMenu(
 									"\nuse arrow key to select recipe\n"
 									"press enter for final selection :\n",
@@ -1111,7 +1124,39 @@ int main(int argc, char** argv) {
 					}
 				}
 			  },
-			  {actions[5], [&done]() {
+			{actions[5], [&errorCode , &recipeSelection, &recipes]() {
+					std::string selectedRecipe = selectMenu(
+									"\nuse arrow key to select recipe\n"
+									"press enter for final selection :\n",
+									recipeSelection,
+									recipes);
+					TeachData data;
+					if (!loadDataFromXML(data, selectedRecipe)) {
+						std::cerr << "Error loading data." << std::endl;
+						return false;
+					}
+
+					TeachData copy;
+					bool success = jodoJogCatheterPath(subkeyHandle,
+													data,
+													copy,
+													errorCode);
+					if (!success) {
+						LogError("jodoDemoProfilePositionMode", success, errorCode);
+						return;
+					}
+
+					haltPositionMovementDrives(subkeyHandle, &errorCode);
+					if (yesNoUpdateProfile() == "yeS" ) {
+						if (!saveDataToXML(copy, selectedRecipe)) {
+							std::cerr << "Error saving data." << std::endl;
+							return;
+						}
+						
+					}
+				}
+			  },
+			  {actions[6], [&done]() {
 					system("cls");
 					done = true;
 				}

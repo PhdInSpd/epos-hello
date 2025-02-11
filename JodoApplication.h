@@ -76,6 +76,10 @@ void setAll(std::vector<bool>& value, bool on);
 bool jodoContinuousCatheterPath(HANDLE pDevice,
 								const  TeachData& data,
 								DWORD& rErrorCode);
+bool jodoJogCatheterPath(HANDLE pDevice,
+						const  TeachData& data,
+						TeachData& copy,
+						DWORD& rErrorCode);
 double getVectorMagnitude(std::vector<double>& delta);
 int countFailedDeltas(std::vector<double> delta);
 int countFlippedDeltas(const std::vector<double>& delta, const std::vector<double>& nextDelta);

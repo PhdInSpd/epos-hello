@@ -21,6 +21,17 @@ bool TeachData::operator==(const TeachData& other) const {
             points == other.points ;
 }
 
+TeachData::TeachData(const TeachData& other){
+    name = other.name;
+    pathAcceleration = other.pathAcceleration;
+    points = other.points;
+}
+
+TeachData::TeachData(){
+    name = "";
+    pathAcceleration = 0;
+}
+
 bool saveDataToXML(const TeachData& data, const std::string& filename) {
     pugi::xml_document doc;
     pugi::xml_node root = doc.append_child("TeachData");

@@ -27,6 +27,8 @@ struct TeachData {
 
     void print() const;
     bool operator==(const TeachData& other) const;
+    TeachData(const TeachData& other);
+    TeachData();
 };
 
 bool saveDataToXML(const TeachData& data, const std::string& filename);

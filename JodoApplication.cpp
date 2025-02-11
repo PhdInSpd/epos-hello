@@ -256,6 +256,7 @@ JoyRsp runJoystickMode(HANDLE pDevice,
 
 	return rsp;
 }
+
 /// <summary>
 /// continuous path from given profilecontinuous path from given profile
 /// </summary>
@@ -464,36 +465,38 @@ bool jodoContinuousCatheterPath(HANDLE pDevice,
 }
 
 bool jodoJogCatheterPath(HANDLE pDevice,
-	const  TeachData& data,
-	DWORD& rErrorCode) {
+						const  TeachData& data,
+						TeachData& copy,
+						DWORD& rErrorCode) {
 	bool success = true;
 
-	LogInfo("set profile position mode");
-
-	
+	TeachData copy = data;
 
 	double unitDirection[NUM_AXES] = { 0 };
-
 	int noPoints = data.points.size();
-	for (size_t point = 0; point < noPoints; point++) {
+
+	int prevPoint = -1;
+	for (int point = 0; point < noPoints;) {
 		if (!(success = activateProfilePositionModeDrives(pDevice, &rErrorCode))) {
 			return success;
 		}
 
-	#pragma region calculate segment i profile to make line
-
-
+		#pragma region calculate segment i profile to make line
 		std::vector<double> startPos(NUM_AXES);
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			startPos[i] = point == 0 ?
-				getCommandPosition(pDevice, 1 + i) / scld[i] :
-				//getCommandPosition(pDevice, 1 + i) / scld[i];
-				data.points[point - 1][i];
+			startPos[i] = getCommandPosition(pDevice, 1 + i) / scld[i];
+		}
+
+		std::vector<double> endPos(NUM_AXES);
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			endPos[i] = (copy.points.size() - 1) >= point?
+						copy.points[point][i]:
+						data.points[point][i];
 		}
 
 		std::vector<double> delta(NUM_AXES);
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			delta[i] = data.points[point][i] - startPos[i];
+			delta[i] = endPos[i] - startPos[i];
 		}
 
 		// results with zero magnitude are invalid unitDirection
@@ -529,68 +532,50 @@ bool jodoJogCatheterPath(HANDLE pDevice,
 		}
 		#pragma endregion
 
-		// set line profile
+		#pragma region set line profile
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			if (!VCS_SetPositionProfile(pDevice,
 				1 + i,
 				profileVelocity[i],
 				profileAcceleration[i],
 				profileDeceleration[i],
-				&rErrorCode)) {
+				&rErrorCode) ) {
 				std::string error = "VCS_SetPositionProfile " + i;
 				LogError(error, success, rErrorCode);
 				success = false;
 				return success;
 			}
 		}
+		#pragma endregion
+		
+		#pragma region set target position
+		// set relative move
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			setTargetPosition(pDevice, 1 + i, delta[i] * scld[i]);
+		}
+		#pragma endregion
+		
+		#pragma region init motion
+		// time measurement
 		double start = 0;
 		double end = 0;
 		double elapsed = 0;
 
-		if (point==0) {
-			// set endPoint
-			for (size_t i = 0; i < NUM_AXES; i++) {
-				setTargetPosition(pDevice, 1 + i, data.points[point][i] * scld[i]);
-			}
-
-			// 0:	all axis start move at the same time.
-			//		Only works for unit1
-			// moveRel(pDeviceHandle, 0);
-			start = SEC_TIME();
-			for (size_t i = 0; i < NUM_AXES; i++) {
-				moveAbs(pDevice, 1 + i);
-			}
-			// only moves unit 1. using key or subkey 
-		//moveAbs(pDevice, 0);
-			end = SEC_TIME();
-			elapsed = end - start;
+		start = SEC_TIME();
+		for (size_t i = 0; i < NUM_AXES; i++) {
+			moveRel(pDevice, 1 + i);
 		}
-		else {
-			// set endPoint
-			for (size_t i = 0; i < NUM_AXES; i++) {
-				setTargetPosition(pDevice, 1 + i, delta[i] * scld[i]);
-			}
+		end = SEC_TIME();
+		elapsed = end - start;
+		#pragma endregion
 
-			// 0:	all axis start move at the same time.
-			//		Only works for unit1
-			// moveRel(pDeviceHandle, 0);
-			start = SEC_TIME();
-			for (size_t i = 0; i < NUM_AXES; i++) {
-				moveRel(pDevice, 1 + i);
-			}
-			// only moves unit 1. using key or subkey 
-		//moveAbs(pDevice, 0);
-			end = SEC_TIME();
-			elapsed = end - start;
-
-		}
-		
-		
-
+		#pragma region move reset
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			moveReset(pDevice, 1 + i);
 		}
+		#pragma endregion
 
+		#pragma region wait move done
 		bool targetsReached = true;
 		do {
 			// each getCommandPosition() takes 2.5 ms
@@ -609,26 +594,48 @@ bool jodoJogCatheterPath(HANDLE pDevice,
 			}
 			sleep(1);
 		} while (!targetsReached);
+		#pragma endregion
 
+		#pragma region print final position
 		long finalPos[NUM_AXES] = { 0 };
 		getActualPositionDrives(pDevice, finalPos);
 		double finalPosUserUnits[NUM_AXES] = { 0 };
 		scalePosition(finalPos, finalPosUserUnits);
 		printPosition("finalPosUI= ", finalPosUserUnits);
 		printPosition("finalPos= ", finalPos);
+		#pragma endregion
 
+		#pragma region adjustment
 		std::vector<bool> joyEnable(NUM_AXES, true);
 		JoyRsp rsp = runJoystickMode(pDevice,
 			joyEnable,
 			"verify point: accept(A) or reject(B)",
 			rErrorCode);
-
-		if (!((rsp == ACCEPT))) {
-			LogError("runJoystickMode", false, rErrorCode);
+		if (rsp == JoyRsp::ACCEPT) {
+			std::vector<double> newPoint = data.points[point];
+			for (size_t i = 0; i < NUM_AXES; i++) {
+				newPoint[i] = finalPosUserUnits[i];
+			}
+			copy.points.push_back(newPoint);
+			prevPoint = point;
+			point++;
 		}
-
-		sleep(1);
+		else if (rsp == JoyRsp::REJECT) {
+			prevPoint = point;
+			point--;
+			if (point<0){
+				LogInfo("already at start");
+				point = 0;
+			}
+		}
+		else if (rsp == JoyRsp::FAULT) {
+			LogError("runJoystickMode", false, rErrorCode);
+			success = false;
+			return success;
+		}
+		#pragma endregion 
 	}
+
 	return success;
 }
 
