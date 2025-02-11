@@ -38,6 +38,7 @@
 #include "PLC.h"
 #include "TeachData.h"
 #include "RecipeRead.h"
+using namespace std;
 
 typedef void* HANDLE;
 typedef int BOOL;
@@ -96,6 +97,7 @@ bool  clearFaultsAndEnable(DWORD* p_pErrorCode, WORD nodeId);
 int   PrintAvailableInterfaces();
 int	  PrintAvailablePorts(char* p_pInterfaceNameSel);
 int	  PrintAvailableProtocols();
+void showMenu(const std::string& header,const std::vector<std::string>& menuOptions,const int& selectedOption);
 int main(int argc, char** argv);
 bool isFilenameValid(const std::string& filename);
 bool  PrintDeviceVersion();
@@ -364,7 +366,8 @@ bool jodoTeach(HANDLE keyHandle, TeachData &teach, double defaultPathVel, DWORD*
 		rsp = runJoystickMode(	keyHandle,
 								joyEnable,
 								msg + "point: " + std::to_string(	  teach.points.size()),
-								*pErrorCode); 
+								*pErrorCode,
+								showDrivesStatus);
 
 		if (rsp == JoyRsp::ACCEPT) {
 			long teachPos[NUM_AXES] = { 0 };
@@ -743,7 +746,7 @@ bool Demo(DWORD* pErrorCode) {
 		joyEnable.push_back(true);
 	}
 
-	success = runJoystickMode(subkeyHandle, joyEnable,"Accept or reject", * pErrorCode);
+	success = runJoystickMode(subkeyHandle, joyEnable,"Accept or reject", * pErrorCode, showDrivesStatus);
 	if(!success) {
 		LogError( "DemoProfileVelocityMode", success, *pErrorCode);
 		return success;
@@ -910,22 +913,7 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
 	FTrigger ftUp, ftDown, ftEnter;
 	while (true) {
 		if (update) {
-			// Clear the console (Windows-specific)
-			system("cls");
-
-			// Display the menu with highlighting
-			std::cout << header;
-			for (size_t i = 0; i < menuOptions.size(); ++i) {
-				if (i == selectedOption) {
-					std::cout << "\033[1;32m"; // Green highlight (ANSI escape codes)
-					std::cout << "> "; // Add a selection indicator
-				}
-				std::cout << i + 1 << "] " << menuOptions[i] << std::endl;
-
-				if (i == selectedOption) {
-					std::cout << "\033[0m"; // Reset color
-				}
-			}
+			showMenu(header, menuOptions, selectedOption);
 			update = false;
 		}
 		
@@ -966,6 +954,28 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
 	}
 }
 
+
+void showMenu(const std::string& header, const std::vector<std::string>& menuOptions, const int& selectedOption) {
+
+	// Clear the console (Windows-specific)
+	system("cls");
+	//setTextPosition(0, 0);
+
+	// Display the menu with highlighting
+	std::cout << header;
+	for (size_t i = 0; i < menuOptions.size(); ++i) {
+		if (i == selectedOption) {
+			std::cout << "\033[1;32m"; // Green highlight (ANSI escape codes)
+			std::cout << "> "; // Add a selection indicator
+		}
+		std::cout << i + 1 << "] " << menuOptions[i] << std::endl;
+
+		if (i == selectedOption) {
+			std::cout << "\033[0m"; // Reset color
+		}
+	}
+}
+
 std::string yesNoUpdateProfile() {
 	static int selection = 0;
 	std::vector<std::string> profileActions = {
@@ -979,7 +989,11 @@ std::string yesNoUpdateProfile() {
 		profileActions);
 	return selectedAction;
 }
+
+
+
 int main(int argc, char** argv) {
+	
 	if (!initializeGamecontroller()) {
 		return 1;
 	}
@@ -1075,7 +1089,8 @@ int main(int argc, char** argv) {
 					JoyRsp rsp = runJoystickMode(subkeyHandle,
 													joyEnable,
 													"accet(A) or reject(B)",
-													errorCode);
+													errorCode,
+													showDrivesStatus);
 
 					if (!((rsp == ACCEPT))) {
 						LogError("runJoystickMode", false, errorCode);
@@ -1133,7 +1148,7 @@ int main(int argc, char** argv) {
 					TeachData data;
 					if (!loadDataFromXML(data, selectedRecipe)) {
 						std::cerr << "Error loading data." << std::endl;
-						return false;
+						return;
 					}
 
 					TeachData copy;

@@ -2,13 +2,14 @@
 #include "JodoCanopenMotion.h"
 #include "JodoApplication.h"
 #include <iostream>
+#include <iomanip>
 #include <sstream>
 #include <chrono>
 #include <algorithm> // For std::transform
 #include "PLC.h"
 #include "TeachData.h"
 #include "testgamecontroller.h"
-
+using namespace std;
 
 void LogError(std::string functionName, int p_lResult, unsigned int p_ulErrorCode)
 {
@@ -144,7 +145,8 @@ void setAll(std::vector<bool>& value, bool on) {
 JoyRsp runJoystickMode(HANDLE pDevice,
 	std::vector<bool>& joyEnable,
 	std::string msg,
-	DWORD& rErrorCode) {
+	DWORD& rErrorCode,
+	Action updateUI) {
 	const int NUM_JOY_CHANNELS = 6;
 	const float DEAD_BAND = 0.1;
 
@@ -171,6 +173,8 @@ JoyRsp runJoystickMode(HANDLE pDevice,
 	FTrigger ftVel, ftAccept, ftReject;
 	ftVel.CLK(diVelSelect);
 
+	Ton tonUI;
+	tonUI.DelaySec = .1;
 	while (countOn(joyEnable)/*number of axes enabled*/ > 0) {
 		// get joystick left analog 
 		handlelGamecontrollerEvents();
@@ -238,6 +242,11 @@ JoyRsp runJoystickMode(HANDLE pDevice,
 				LogError("VCS_MoveWithVelocity", rsp, rErrorCode);
 				setAll(joyEnable, false);
 			}
+		}
+
+		if ( updateUI && tonUI.CLK(true) ){
+			tonUI.CLK(false);
+			updateUI(pDevice);
 		}
 		sleep(16); // 60 updates/sec
 	}
@@ -463,14 +472,59 @@ bool jodoContinuousCatheterPath(HANDLE pDevice,
 	}
 	return success;
 }
-
+// Method 1: Using std::setw and std::left/right (for fixed-width positioning)
+void setTextPosition(int x, int y) {
+	// Basic screen positioning (console-dependent, may not work perfectly on all systems)
+	std::cout << "\033[" << y << ";" << x << "H"; // ANSI escape codes for cursor positioning
+}
+void textFixedWidth(const std::string& text, int width, char fillChar) {
+	std::cout << std::setw(width) << std::left << std::setfill(fillChar) << text; // Set width, left alignment, fill character
+}
+void displayTextFixedWidth(const std::string& text, int x, int y, int width, char fillChar) {
+	setTextPosition(x, y);
+	textFixedWidth(text, width, fillChar);
+}
+std::string doubleToStringFixed(double value, int precision) {
+	std::stringstream ss;
+	ss << std::fixed << std::setprecision(precision) << value;
+	return ss.str();
+}
+void displayMotion(vector<string> headers,
+	vector<double> p0,
+	vector<double> p1,
+	int startX ,
+	int precision ,
+	int XLength ) {
+	setTextPosition(startX, 1);
+	for (size_t i = 0; i < headers.size(); i++) {
+		textFixedWidth(headers[i], XLength / headers.size());
+	}
+	;
+	for (size_t i = 0; i < p0.size(); i++) {
+		setTextPosition(startX, 2 + i);
+		textFixedWidth(doubleToStringFixed(p0[i], precision), XLength / headers.size());
+		textFixedWidth(doubleToStringFixed(p1[i], precision), XLength / headers.size());
+	}
+}
+void showDrivesStatus(HANDLE keyHandle) {
+	static vector<string> headers = { "enc","cmd" };
+	static vector<double> p0(NUM_AXES);
+	static vector<double> p1(NUM_AXES);
+	std::vector<double> cmd(NUM_AXES);
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		cmd[i] = getCommandPosition(keyHandle, 1 + i) / scld[i];
+	}
+	std::vector<double> enc(NUM_AXES);
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		enc[i] = getActualPosition(keyHandle, 1 + i) / scld[i];
+	}
+	displayMotion(headers, enc, cmd);
+}
 bool jodoJogCatheterPath(HANDLE pDevice,
 						const  TeachData& data,
 						TeachData& copy,
 						DWORD& rErrorCode) {
 	bool success = true;
-
-	TeachData copy = data;
 
 	double unitDirection[NUM_AXES] = { 0 };
 	int noPoints = data.points.size();
@@ -610,7 +664,8 @@ bool jodoJogCatheterPath(HANDLE pDevice,
 		JoyRsp rsp = runJoystickMode(pDevice,
 			joyEnable,
 			"verify point: accept(A) or reject(B)",
-			rErrorCode);
+			rErrorCode,
+			showDrivesStatus);
 		if (rsp == JoyRsp::ACCEPT) {
 			std::vector<double> newPoint = data.points[point];
 			for (size_t i = 0; i < NUM_AXES; i++) {

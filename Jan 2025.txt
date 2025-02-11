@@ -12,7 +12,13 @@ x		-	joystick to select menu item
 x		-	fix recipe selection
 		-	run stop trajectory.
 			-	sync move to stored point
+				-	ready to test
 			-	jog	
+				-	ready to test
 			-	move using stored profile delta
+				-	ready to test
 		-	display enc pos
+			-	ready to test
+		-	display cmd pos
+			-	ready to test
 o	-	move to linux

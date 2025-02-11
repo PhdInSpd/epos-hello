@@ -9,13 +9,14 @@
 	#define sleep Sleep
 #endif //  WIN32
 
-
+using namespace std;
 enum JoyRsp {
 	RUNNING,
 	FAULT,
 	ACCEPT,
 	REJECT,
 };
+
 /***************************************************************/
 /* messaging*/
 void  LogError(std::string functionName, int p_lResult, unsigned int p_ulErrorCode);
@@ -63,10 +64,26 @@ bool activateProfilePositionModeDrives(HANDLE keyHandle, DWORD* pErrorCode);
 /************************************************************/
 
 /************************************************************/
+// Method 1: Using std::setw and std::left/right (for fixed-width positioning)
+void setTextPosition(int x, int y);
+void textFixedWidth(const std::string& text, int width, char fillChar = ' ');
+void displayTextFixedWidth(const std::string& text, int x, int y, int width, char fillChar = ' ');
+std::string doubleToStringFixed(double value, int precision);
+void displayMotion(vector<string> headers,
+	vector<double> p0,
+	vector<double> p1,
+	int startX = 100,
+	int precision = 3,
+	int XLength = 30);
+void showDrivesStatus(HANDLE keyHandle);
+// 7. Using a type alias (for better readability - recommended)
+using Action = void (*)(HANDLE keyHandle); // Creates a type alias named MathFunction
+
 JoyRsp runJoystickMode(HANDLE pDevice,
 	std::vector<bool>& joyEnable,
 	std::string msg,
-	DWORD& rErrorCode);
+	DWORD& rErrorCode,
+	Action updateUI=nullptr);
 
 int countOn(const std::vector<bool>& value);
 
