@@ -104,14 +104,10 @@ bool  PrintDeviceVersion();
 
 /****************************************************************************/
 /*	jodo application 														*/
-
-
 void showDrivesStatus(HANDLE keyHandle);
-
 JoyRsp runEnableMode(HANDLE pDevice,
 						std::string msg,
 						DWORD& rErrorCode);
-
 JoyRsp runEnableMode(HANDLE pDevice,
 						std::string msg,
 						DWORD& rErrorCode) {
@@ -213,8 +209,7 @@ JoyRsp runHomeMode(	HANDLE pDevice,
 	return rsp;
 }
 
-JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
-{
+JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)	{
 	JoyRsp rsp = ACCEPT;
 	if (!VCS_ActivateHomingMode(pDevice, 1 + axis, &rErrorCode)) {
 		LogError("VCS_ActivateHomingMode",
@@ -250,19 +245,7 @@ JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)
 
 	}
 
-
-
-
-	/*if (!VCS_GetPositionIs(pDevice, 1 + axis, &homePos, &rErrorCode)) {
-	LogError("VCS_GetPositionIs",
-	false,
-	rErrorCode);
-	rsp = JSResponse::FAULT;
-	return rsp;
-	}*/
-
 	homePos = 0;
-
 	if (!VCS_SetHomingParameter(pDevice, 1 + axis, acceleration,
 		speedSwitch, speedIndex, homeOffset, currentThreshold, homePos, &rErrorCode)) {
 		LogError("VCS_SetHomingParameter",
@@ -351,9 +334,6 @@ bool jodoPathDemo(HANDLE keyHandle, std::string & recipeSelection, DWORD* pError
 }
 
 bool jodoTeach(HANDLE keyHandle, TeachData &teach, double defaultPathVel, DWORD* pErrorCode) {
-
-	
-	
 	JoyRsp rsp = JoyRsp::RUNNING;
 	std::vector<bool> joyEnable;
 	std::string msg = "jog to teach point. accept(A) exit(B)";
@@ -411,7 +391,7 @@ bool jodoTeach(HANDLE keyHandle, TeachData &teach, double defaultPathVel, DWORD*
 
 
 void showDrivesStatus(HANDLE keyHandle) {
-	static vector<string> headers = { "enc","cmd" };
+	static vector<string> headers = { "enc(rev)","cmd(rev)" };
 	static vector<double> p0(NUM_AXES);
 	static vector<double> p1(NUM_AXES);
 	std::vector<double> cmd(NUM_AXES);
@@ -532,35 +512,36 @@ int OpenDevice(DWORD* pErrorCode) {
 	return success;
 }
 
-bool CloseDevice(DWORD* p_pErrorCode)
-{
+bool CloseDevice(DWORD* pErrorCode) {
 	bool success = false;
 
-	*p_pErrorCode = 0;
+	*pErrorCode = 0;
+
+	LogInfo("Close subdevice");
+	if (!VCS_CloseSubDevice(subkeyHandle, pErrorCode)) {
+		return success;
+	}
 
 	LogInfo("Close device");
-
-	if (VCS_CloseSubDevice(subkeyHandle, p_pErrorCode))
-	{
-		if (VCS_CloseDevice(g_pKeyHandle, p_pErrorCode) != 0 && *p_pErrorCode == 0)
-		{
-			success = true;
-		}
+	if (!VCS_CloseDevice(g_pKeyHandle, pErrorCode) ) {
+		return success;
 	}
+
+	if ( *pErrorCode != 0) {
+		return success;
+	}
+	success = true;
 	return success;
 }
 
-bool ParseArguments(int argc, char** argv)
-{
+bool ParseArguments(int argc, char** argv){
 	int lOption;
 	bool success = true;
 
 	opterr = 0;
 
-	while((lOption = getopt(argc, argv, "hlrvd:s:i:p:b:n:")) != -1)
-	{
-		switch (lOption)
-		{
+	while((lOption = getopt(argc, argv, "hlrvd:s:i:p:b:n:")) != -1) {
+		switch (lOption) {
 			case 'h':
 				PrintUsage();
 				success = false;
@@ -605,8 +586,7 @@ bool ParseArguments(int argc, char** argv)
 	return success;
 }
 
-int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD & p_rlErrorCode)
-{
+int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DWORD & p_rlErrorCode){
 	int lResult = MMC_SUCCESS;
 	std::stringstream msg;
 
@@ -681,26 +661,22 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 	return lResult;
 }
 
-bool clearFaultsAndEnable(DWORD* pErrorCode, WORD nodeId)
-{
+bool clearFaultsAndEnable(DWORD* pErrorCode, WORD nodeId) {
 	bool success = true;
 	BOOL oIsFault = 0;
 
-	if(!VCS_GetFaultState(subkeyHandle, nodeId, &oIsFault, pErrorCode ) )
-	{
+	if(!VCS_GetFaultState(subkeyHandle, nodeId, &oIsFault, pErrorCode ) ) {
 		LogError("VCS_GetFaultState", success, *pErrorCode);
 		success = false;
 		return success;
 	}
 
-	if(oIsFault)
-	{
+	if(oIsFault) {
 		std::stringstream msg;
 		msg << "clear fault, node = '" << nodeId << "'";
 		LogInfo(msg.str());
 
-		if(!VCS_ClearFault(subkeyHandle, nodeId, pErrorCode) )
-		{
+		if(!VCS_ClearFault(subkeyHandle, nodeId, pErrorCode) ) {
 			LogError("VCS_ClearFault", success, *pErrorCode);
 			success = false;
 			return success;
@@ -708,17 +684,14 @@ bool clearFaultsAndEnable(DWORD* pErrorCode, WORD nodeId)
 	}
 
 	BOOL oIsEnabled = 0;
-	if(!VCS_GetEnableState(subkeyHandle, nodeId, &oIsEnabled, pErrorCode) )
-	{
+	if(!VCS_GetEnableState(subkeyHandle, nodeId, &oIsEnabled, pErrorCode) ) {
 		LogError("VCS_GetEnableState", success, *pErrorCode);
 		success = false;
 		return success;
 	}
 
-	if(!oIsEnabled)
-	{
-		if(VCS_SetEnableState(subkeyHandle, nodeId, pErrorCode) == 0)
-		{
+	if(!oIsEnabled) {
+		if(VCS_SetEnableState(subkeyHandle, nodeId, pErrorCode) == 0) {
 			LogError("VCS_SetEnableState", success, *pErrorCode);
 			success = false;
 		}
@@ -733,23 +706,19 @@ int MaxFollowingErrorDemo(DWORD& p_rlErrorCode) {
 
 	lResult = VCS_ActivateProfilePositionMode(subkeyHandle, g_usNodeId, &p_rlErrorCode);
 
-	if(lResult)
-	{
+	if(lResult) {
 		lResult = VCS_SetMaxFollowingError(subkeyHandle, g_usNodeId, 1, &p_rlErrorCode);
 	}
 
-	if(lResult)
-	{
+	if(lResult) {
 		lResult = VCS_MoveToPosition(subkeyHandle, g_usNodeId, 1000, 1, 1, &p_rlErrorCode);
 	}
 
-	if(lResult)
-	{
+	if(lResult) {
 		lResult = VCS_GetDeviceErrorCode(subkeyHandle, g_usNodeId, 1, &lDeviceErrorCode, &p_rlErrorCode);
 	}
 
-	if(lResult)
-	{
+	if(lResult) {
 		lResult = lDeviceErrorCode == EXPECTED_ERROR_CODE ? MMC_SUCCESS : MMC_FAILED;
 	}
 
@@ -783,21 +752,17 @@ bool Demo(DWORD* pErrorCode) {
 	return success;
 }
 
-void PrintHeader()
-{
+void PrintHeader(){
 	SeparatorLine();
-
 	LogInfo("Epos Command Library Example Program, (c) maxonmotor ag 2014-2019");
-
 	SeparatorLine();
 }
 
-int PrintAvailablePorts(char* p_pInterfaceNameSel)
-{
+int PrintAvailablePorts(char* p_pInterfaceNameSel) {
 	int lResult = MMC_FAILED;
 	int lStartOfSelection = 1;
-	int lMaxStrSize = 255;
-	char* pPortNameSel = new char[lMaxStrSize];
+	const int lMaxStrSize = 255;
+	char pPortNameSel[lMaxStrSize] = {0};
 	int lEndOfSelection = 0;
 	DWORD ulErrorCode = 0;
 
@@ -831,16 +796,19 @@ int PrintAvailableInterfaces()
 	int lEndOfSelection = 0;
 	DWORD ulErrorCode = 0;
 
-	do
-	{
-		if(!VCS_GetInterfaceNameSelection((char*)g_deviceName.c_str(), (char*)g_protocolStackName.c_str(), lStartOfSelection, pInterfaceNameSel, lMaxStrSize, &lEndOfSelection, &ulErrorCode))
-		{
+	do{
+		if(!VCS_GetInterfaceNameSelection((char*)g_deviceName.c_str(),
+											(char*)g_protocolStackName.c_str(),
+											lStartOfSelection,
+											pInterfaceNameSel,
+											lMaxStrSize,
+											&lEndOfSelection,	
+											&ulErrorCode)) {
 			lResult = MMC_FAILED;
 			LogError("GetInterfaceNameSelection", lResult, ulErrorCode);
 			break;
 		}
-		else
-		{
+		else {
 			lResult = MMC_SUCCESS;
 
 			printf("interface = %s\n", pInterfaceNameSel);
@@ -878,12 +846,11 @@ bool PrintDeviceVersion()
 	return success;
 }
 
-int PrintAvailableProtocols()
-{
+int PrintAvailableProtocols(){
 	int lResult = MMC_FAILED;
 	int lStartOfSelection = 1;
-	int lMaxStrSize = 255;
-	char* pProtocolNameSel = new char[lMaxStrSize];
+	const int lMaxStrSize = 255;
+	char pProtocolNameSel[lMaxStrSize];
 	int lEndOfSelection = 0;
 	DWORD ulErrorCode = 0;
 
@@ -907,8 +874,6 @@ int PrintAvailableProtocols()
 	while(lEndOfSelection == 0);
 
 	SeparatorLine();
-
-	delete[] pProtocolNameSel;
 
 	return lResult;
 }
@@ -1246,7 +1211,7 @@ int main(int argc, char** argv) {
 	return success;
 }
 
-bool isFilenameValid(const std::string& filename){
+bool isFilenameValid(const std::string& filename) {
 
 	if (filename.empty()) {
 		return false;
