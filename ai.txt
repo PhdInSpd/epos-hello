@@ -1,0 +1,21 @@
+For the Makefile bellow, I get error:  *** No rule to make target 'obj/CatheterRobot.o', needed by 'cathRobot'.  Stop.
+
+CXX = g++
+CXXFLAGS = -std=c++17 -Wall -g # Example flags
+LDFLAGS = -lpugixml
+TARGET = cathRobot
+OBJDIR = obj
+SRCDIR = .
+
+SOURCES = $(SRCDIR)/CatheterRobot.cpp $(SRCDIR)/JodoApplication.cpp $(SRCDIR)/JodoCanopenMotion.cpp $(SRCDIR)/PLC.cpp $(SRCDIR)/pugixml.cpp $(SRCDIR)/RecipeRead.cpp $(SRCDIR)/Scaling.cpp $(SRCDIR)/TeachData.cpp $(SRCDIR)/testgamecontroller.cpp $(SRCDIR)/testutils.cpp
+OBJECTS = $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
+
+$(TARGET): $(OBJECTS)
+	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) -o $(TARGET)  # <--- TAB HERE
+
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(SRCDIR)/%.h
+	@mkdir -p $(OBJDIR) # Make the directory if it doesn't exist # <--- TAB HERE
+	$(CXX) $(CXXFLAGS) -c $< -o $@ # <--- TAB HERE
+
+clean:
+	rm -f $(TARGET) $(OBJDIR)/*.o # <--- TAB HERE
