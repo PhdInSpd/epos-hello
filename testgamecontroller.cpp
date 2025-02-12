@@ -778,8 +778,8 @@ bool handlelGamecontrollerEvents() {
             if (event.type == SDL_CONTROLLERBUTTONDOWN) {
                 SetController(event.cbutton.which);
             }
-            SDL_Log("Controller %" SDL_PRIs32 " button %s %s\n", event.cbutton.which, SDL_GameControllerGetStringForButton((SDL_GameControllerButton)event.cbutton.button),
-                    event.cbutton.state ? "pressed" : "released");
+            /*SDL_Log("Controller %" SDL_PRIs32 " button %s %s\n", event.cbutton.which, SDL_GameControllerGetStringForButton((SDL_GameControllerButton)event.cbutton.button),
+                    event.cbutton.state ? "pressed" : "released");*/
 
             /* Cycle PS5 trigger effects when the microphone button is pressed */
             if (event.type == SDL_CONTROLLERBUTTONDOWN &&
@@ -964,6 +964,13 @@ bool joystickGetButton(int button) {
     return (bool)SDL_JoystickGetButton(   SDL_GameControllerGetJoystick(gamecontroller),
                                           button);
 }
+
+
+bool gameControllerGetButton(int button) {
+    return (bool)SDL_GameControllerGetButton(gamecontroller,
+        (SDL_GameControllerButton)button);
+}
+
 
 bool getAnalogInputs(float channels[]) {
    

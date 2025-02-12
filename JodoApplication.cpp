@@ -148,7 +148,7 @@ JoyRsp runJoystickMode(HANDLE pDevice,
 	DWORD& rErrorCode,
 	Action updateUI) {
 	const int NUM_JOY_CHANNELS = 6;
-	const float DEAD_BAND = 0.1;
+	const float DEAD_BAND = 0.15;
 
 	JoyRsp rsp = JoyRsp::REJECT;
 
@@ -181,12 +181,12 @@ JoyRsp runJoystickMode(HANDLE pDevice,
 		float channels[NUM_JOY_CHANNELS] = { 0 };
 		bool connected = getAnalogInputs(channels);
 
-		bool axis4AI = joystickGetButton(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
-		bool axis5AI = joystickGetButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
+		bool axis4AI = gameControllerGetButton(SDL_CONTROLLER_BUTTON_LEFTSHOULDER);
+		bool axis5AI = gameControllerGetButton(SDL_CONTROLLER_BUTTON_RIGHTSHOULDER);
 		channels[4] = axis4AI ? -1 : channels[4];
 		channels[5] = axis5AI ? -1 : channels[5];
 		// accept?
-		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
+		if (ftAccept.CLK(gameControllerGetButton(SDL_CONTROLLER_BUTTON_A))) {
 			LogInfo("ACCEPT");
 			setAll(joyEnable, false);
 			rsp = JoyRsp::ACCEPT;
@@ -194,7 +194,7 @@ JoyRsp runJoystickMode(HANDLE pDevice,
 		}
 
 		// reject?
-		if (ftReject.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_B))) {
+		if (ftReject.CLK(gameControllerGetButton(SDL_CONTROLLER_BUTTON_B))) {
 			LogInfo("REJECt");
 			setAll(joyEnable, false);
 			rsp = JoyRsp::REJECT;
@@ -202,7 +202,7 @@ JoyRsp runJoystickMode(HANDLE pDevice,
 		}
 
 		// change speed?
-		diVelSelect = joystickGetButton(SDL_CONTROLLER_BUTTON_GUIDE);
+		diVelSelect = gameControllerGetButton(SDL_CONTROLLER_BUTTON_GUIDE);
 		if (ftVel.CLK(diVelSelect)) {
 			joySelection = !joySelection;
 			if (joySelection) {
@@ -506,24 +506,17 @@ void displayMotion(vector<string> headers,
 		textFixedWidth(doubleToStringFixed(p1[i], precision), XLength / headers.size());
 	}
 }
-void showDrivesStatus(HANDLE keyHandle) {
-	static vector<string> headers = { "enc","cmd" };
-	static vector<double> p0(NUM_AXES);
-	static vector<double> p1(NUM_AXES);
-	std::vector<double> cmd(NUM_AXES);
-	for (size_t i = 0; i < NUM_AXES; i++) {
-		cmd[i] = getCommandPosition(keyHandle, 1 + i) / scld[i];
-	}
-	std::vector<double> enc(NUM_AXES);
-	for (size_t i = 0; i < NUM_AXES; i++) {
-		enc[i] = getActualPosition(keyHandle, 1 + i) / scld[i];
-	}
-	displayMotion(headers, enc, cmd);
-}
+
 bool jodoJogCatheterPath(HANDLE pDevice,
 						const  TeachData& data,
 						TeachData& copy,
+						Action showStatus,
 						DWORD& rErrorCode) {
+
+	Ton ui;
+	ui.DelaySec = .1;
+	ui.CLK(false);
+
 	bool success = true;
 
 	double unitDirection[NUM_AXES] = { 0 };
@@ -542,8 +535,9 @@ bool jodoJogCatheterPath(HANDLE pDevice,
 		}
 
 		std::vector<double> endPos(NUM_AXES);
+		bool useCopy = ((int)copy.points.size() - 1) >= point;
 		for (size_t i = 0; i < NUM_AXES; i++) {
-			endPos[i] = (copy.points.size() - 1) >= point?
+			endPos[i] = useCopy?
 						copy.points[point][i]:
 						data.points[point][i];
 		}
@@ -633,14 +627,18 @@ bool jodoJogCatheterPath(HANDLE pDevice,
 		bool targetsReached = true;
 		do {
 			// each getCommandPosition() takes 2.5 ms
-			start = SEC_TIME();
+			/*start = SEC_TIME();
 			long cmdPos[NUM_AXES] = { 0 };
 			for (size_t i = 0; i < NUM_AXES; i++) {
 				cmdPos[i] = getCommandPosition(pDevice, 1 + i);
 			}
 			end = SEC_TIME();
 			double elapsed = end - start;
-			printPosition("cmdPos= ", cmdPos, std::to_string(elapsed));
+			printPosition("cmdPos= ", cmdPos, std::to_string(elapsed));*/
+			if (ui.CLK(true)){
+				ui.CLK(false);
+				showStatus(pDevice);
+			} 
 
 			targetsReached = true;
 			for (size_t i = 0; i < NUM_AXES; i++) {
@@ -665,13 +663,26 @@ bool jodoJogCatheterPath(HANDLE pDevice,
 			joyEnable,
 			"verify point: accept(A) or reject(B)",
 			rErrorCode,
-			showDrivesStatus);
+			showStatus);
 		if (rsp == JoyRsp::ACCEPT) {
+			// position after Jogging
+			getActualPositionDrives(pDevice, finalPos);
+			scalePosition(finalPos, finalPosUserUnits);
 			std::vector<double> newPoint = data.points[point];
 			for (size_t i = 0; i < NUM_AXES; i++) {
 				newPoint[i] = finalPosUserUnits[i];
 			}
-			copy.points.push_back(newPoint);
+
+			// add new copy or replace 
+			bool addNew = point > ((int)copy.points.size() - 1);
+			if (addNew) {
+				copy.points.push_back(newPoint);
+			}
+			else{
+				for (size_t i = 0; i < NUM_AXES; i++) {
+					copy.points[point][i] =newPoint[i];
+				}
+			}
 			prevPoint = point;
 			point++;
 		}

@@ -75,8 +75,7 @@ void displayMotion(vector<string> headers,
 	int startX = 100,
 	int precision = 3,
 	int XLength = 30);
-void showDrivesStatus(HANDLE keyHandle);
-// 7. Using a type alias (for better readability - recommended)
+
 using Action = void (*)(HANDLE keyHandle); // Creates a type alias named MathFunction
 
 JoyRsp runJoystickMode(HANDLE pDevice,
@@ -96,6 +95,7 @@ bool jodoContinuousCatheterPath(HANDLE pDevice,
 bool jodoJogCatheterPath(HANDLE pDevice,
 						const  TeachData& data,
 						TeachData& copy,
+						Action showStatus,
 						DWORD& rErrorCode);
 double getVectorMagnitude(std::vector<double>& delta);
 int countFailedDeltas(std::vector<double> delta);

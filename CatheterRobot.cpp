@@ -106,7 +106,7 @@ bool  PrintDeviceVersion();
 /*	jodo application 														*/
 
 
-
+void showDrivesStatus(HANDLE keyHandle);
 
 JoyRsp runEnableMode(HANDLE pDevice,
 						std::string msg,
@@ -127,26 +127,26 @@ JoyRsp runEnableMode(HANDLE pDevice,
 		handlelGamecontrollerEvents();
 
 		// accept?
-		if (ftAccept.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
+		if (ftAccept.CLK(gameControllerGetButton(SDL_CONTROLLER_BUTTON_A))) {
 			LogInfo("ACCEPT");
 			rsp = JoyRsp::ACCEPT;
 			continue;
 		}
 
 		// reject?
-		if (ftReject.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_B))) {
+		if (ftReject.CLK(gameControllerGetButton(SDL_CONTROLLER_BUTTON_B))) {
 			LogInfo("REJECt");
 			rsp = JoyRsp::REJECT;
 			continue;
 		}
 
 		// buttons to AXES
-		buttEnable[0] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT);
-		buttEnable[1] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
-		buttEnable[2] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN);
-		buttEnable[3] = joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_UP);
-		buttEnable[4] = joystickGetButton(SDL_CONTROLLER_BUTTON_BACK);
-		buttEnable[5] = joystickGetButton(SDL_CONTROLLER_BUTTON_START);
+		buttEnable[0] = gameControllerGetButton(SDL_CONTROLLER_BUTTON_DPAD_LEFT);
+		buttEnable[1] = gameControllerGetButton(SDL_CONTROLLER_BUTTON_DPAD_RIGHT);
+		buttEnable[2] = gameControllerGetButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN);
+		buttEnable[3] = gameControllerGetButton(SDL_CONTROLLER_BUTTON_DPAD_UP);
+		buttEnable[4] = gameControllerGetButton(SDL_CONTROLLER_BUTTON_BACK);
+		buttEnable[5] = gameControllerGetButton(SDL_CONTROLLER_BUTTON_START);
 
 		// process enable
 		for (int i = 0; i < NUM_AXES; i++) {
@@ -200,10 +200,11 @@ JoyRsp runHomeMode(	HANDLE pDevice,
 		joyEnable.push_back(false);
 	}
 	joyEnable[axis] = true;
-	JoyRsp rsp = runJoystickMode(	pDevice,
-										joyEnable,
-										msg + std::string("axis: ") + std::to_string(axis),
-										rErrorCode);
+	JoyRsp rsp = runJoystickMode(pDevice,
+								joyEnable,
+								msg + std::string("axis: ") + std::to_string(axis),
+								rErrorCode,
+								showDrivesStatus);
 
 	if (rsp != ACCEPT) {
 		return rsp;
@@ -406,6 +407,22 @@ bool jodoTeach(HANDLE keyHandle, TeachData &teach, double defaultPathVel, DWORD*
 	haltPositionMovementDrives(subkeyHandle, pErrorCode);
 	//disableDrives(keyHandle, pErrorCode);
 	return teach.points.size() > 0;
+}
+
+
+void showDrivesStatus(HANDLE keyHandle) {
+	static vector<string> headers = { "enc","cmd" };
+	static vector<double> p0(NUM_AXES);
+	static vector<double> p1(NUM_AXES);
+	std::vector<double> cmd(NUM_AXES);
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		cmd[i] = getCommandPosition(keyHandle, 1 + i) / scld[i];
+	}
+	std::vector<double> enc(NUM_AXES);
+	for (size_t i = 0; i < NUM_AXES; i++) {
+		enc[i] = getActualPosition(keyHandle, 1 + i) / scld[i];
+	}
+	displayMotion(headers, enc, cmd);
 }
 /****************************************************************************/
 
@@ -927,15 +944,15 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
 		}
 
 		// translate to keybord input
-		if (ftDown.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN))){
+		if (ftDown.CLK( gameControllerGetButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN) )){
 			ch = 80;
 			update = true;
 		}
-		if (ftUp.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_DPAD_UP))) {
+		if (ftUp.CLK( gameControllerGetButton(SDL_CONTROLLER_BUTTON_DPAD_UP))) {
 			ch = 72;
 			update = true;
 		}
-		if (ftEnter.CLK(joystickGetButton(SDL_CONTROLLER_BUTTON_A))) {
+		if (ftEnter.CLK(gameControllerGetButton(SDL_CONTROLLER_BUTTON_A))) {
 			ch = 13;
 			update = true;
 		}
@@ -959,7 +976,7 @@ void showMenu(const std::string& header, const std::vector<std::string>& menuOpt
 
 	// Clear the console (Windows-specific)
 	system("cls");
-	//setTextPosition(0, 0);
+	//setTextPosition(0, 1);
 
 	// Display the menu with highlighting
 	std::cout << header;
@@ -1088,7 +1105,7 @@ int main(int argc, char** argv) {
 					std::vector<bool> joyEnable( NUM_AXES,true);
 					JoyRsp rsp = runJoystickMode(subkeyHandle,
 													joyEnable,
-													"accet(A) or reject(B)",
+													"accept(A) or reject(B)",
 													errorCode,
 													showDrivesStatus);
 
@@ -1103,7 +1120,7 @@ int main(int argc, char** argv) {
 					std::cout << "enter teach file name\n";
 					std::cin >> filename;
 					
-					if (isFilenameValid(filename)) {
+					if ( !isFilenameValid(filename) ) {
 						return;
 					}
 					
@@ -1155,6 +1172,7 @@ int main(int argc, char** argv) {
 					bool success = jodoJogCatheterPath(subkeyHandle,
 													data,
 													copy,
+													showDrivesStatus,
 													errorCode);
 					if (!success) {
 						LogError("jodoDemoProfilePositionMode", success, errorCode);
@@ -1162,7 +1180,9 @@ int main(int argc, char** argv) {
 					}
 
 					haltPositionMovementDrives(subkeyHandle, &errorCode);
-					if (yesNoUpdateProfile() == "yeS" ) {
+					if (yesNoUpdateProfile() == "yes" ) {
+						copy.name = data.name;
+						copy.pathAcceleration = data.pathAcceleration;
 						if (!saveDataToXML(copy, selectedRecipe)) {
 							std::cerr << "Error saving data." << std::endl;
 							return;

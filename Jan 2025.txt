@@ -10,15 +10,15 @@ x		-	teach points recipe
 x		-	run continuous trajectory
 x		-	joystick to select menu item
 x		-	fix recipe selection
-		-	run stop trajectory.
-			-	sync move to stored point
-				-	ready to test
-			-	jog	
-				-	ready to test
-			-	move using stored profile delta
-				-	ready to test
-		-	display enc pos
-			-	ready to test
-		-	display cmd pos
-			-	ready to test
+x		-	run stop trajectory.
+x			-	sync move to stored point
+x				-	ready to test
+x			-	jog	
+x				-	ready to test
+x			-	move using stored profile delta
+x				-	ready to test
+x		-	display enc pos
+x			-	ready to test
+x		-	display cmd pos
+o			-	ready to test => jog shows incorrect cmdPos
 o	-	move to linux
