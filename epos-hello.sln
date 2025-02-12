@@ -5,6 +5,11 @@ VisualStudioVersion = 16.0.34729.46
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "epos-hello", "epos-hello.vcxproj", "{2ADC5E4E-4183-473B-AE3B-7CE8B23E7E8D}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{0AA6A11E-5209-4BC1-B5A5-086D91557FEA}"
+	ProjectSection(SolutionItems) = preProject
+		Makefile = Makefile
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
