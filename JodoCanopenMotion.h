@@ -1,5 +1,10 @@
 #pragma once
-#include "Definitions.h"
+#include "xplatform.h"
+#ifdef __linux__
+    #include "linux/Definitions.h"
+#elif _WIN32 || _WIN64
+    #include "win32/Definitions.h"
+#endif
 enum PPMMask
 {
 	SwitchedOn = 0x1,

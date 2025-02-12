@@ -3,11 +3,8 @@
 #include <vector>
 #include <iostream>
 #include <sstream>
+#include "xplatform.h"
 #include "TeachData.h"
-
-#ifdef  WIN32
-	#define sleep Sleep
-#endif //  WIN32
 
 using namespace std;
 enum JoyRsp {

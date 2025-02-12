@@ -1,3 +1,4 @@
+#include <cstddef>
 #include "Scaling.h"
 // convert from revs to encoder count
 double scld[MAX_NUM_AXES] = { 

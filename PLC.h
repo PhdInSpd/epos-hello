@@ -1,6 +1,6 @@
 #pragma once
 #include <chrono>
-#include "Dlltools.h"
+#include "DllTools.h"
 
 double DLL_API SEC_TIME();
 

@@ -1,11 +1,15 @@
-#include "Scaling.h"
-#include "JodoCanopenMotion.h"
-#include "JodoApplication.h"
+
 #include <iostream>
 #include <iomanip>
 #include <sstream>
 #include <chrono>
 #include <algorithm> // For std::transform
+#include <cmath>
+
+#include "xplatform.h"
+#include "Scaling.h"
+#include "JodoCanopenMotion.h"
+#include "JodoApplication.h"
 #include "PLC.h"
 #include "TeachData.h"
 #include "testgamecontroller.h"

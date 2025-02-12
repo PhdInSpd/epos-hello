@@ -11,7 +11,11 @@
 #include <string.h>
 #include <sstream>
 
-#include <conio.h>
+// #include <conio.h>
+#include <sys/select.h>
+#include <termios.h>
+#include <unistd.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <list>
@@ -27,7 +31,13 @@
 //#include <sys/time.h>
 #include <functional>
 
-#include "Definitions.h"
+#ifdef __linux__
+    #include "linux/Definitions.h"
+    #include "xplatform.h"
+#elif _WIN32 || _WIN64
+    #include "win32/Definitions.h"
+#endif
+
 #undef max // Undefine the max macro
 // #include <unistd.h>
 #include "getopt.h"
@@ -40,8 +50,7 @@
 #include "RecipeRead.h"
 using namespace std;
 
-typedef void* HANDLE;
-typedef int BOOL;
+
 
 enum EAppMode
 {
@@ -65,7 +74,6 @@ HANDLE subkeyHandle = 0;
 std::string subdeviceName = "EPOS4";
 std::string subprotocolStackName = "CANopen";
 
-
 EAppMode g_eAppMode = AM_DEMO;
 
 const std::string g_programName = "HelloEposCmd";
@@ -81,7 +89,6 @@ const std::string g_programName = "HelloEposCmd";
 #ifndef MMC_MAX_LOG_MSG_SIZE
 	#define MMC_MAX_LOG_MSG_SIZE 512
 #endif
-
 
 void  PrintUsage();
 void  PrintHeader();
@@ -108,6 +115,13 @@ void showDrivesStatus(HANDLE keyHandle);
 JoyRsp runEnableMode(HANDLE pDevice,
 						std::string msg,
 						DWORD& rErrorCode);
+                        JoyRsp runHomeMode(HANDLE pDevice,
+						std::string msg,
+						int axis,
+						DWORD& rErrorCode);
+
+JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode);
+
 JoyRsp runEnableMode(HANDLE pDevice,
 						std::string msg,
 						DWORD& rErrorCode) {
@@ -180,13 +194,6 @@ JoyRsp runEnableMode(HANDLE pDevice,
 	return rsp;
 }
 
-JoyRsp runHomeMode(HANDLE pDevice,
-						std::string msg,
-						int axis,
-						DWORD& rErrorCode);
-
-JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode);
-
 JoyRsp runHomeMode(	HANDLE pDevice,
 						std::string msg,
 						int axis,
@@ -224,10 +231,10 @@ JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)	{
 		speedSwitch,
 		speedIndex;
 
-	long homeOffset;
+	int homeOffset;
 
 	WORD	currentThreshold;
-	long homePos;
+	int homePos;
 
 
 	if (!VCS_GetHomingParameter(pDevice, 1 + axis,
@@ -389,7 +396,6 @@ bool jodoTeach(HANDLE keyHandle, TeachData &teach, double defaultPathVel, DWORD*
 	return teach.points.size() > 0;
 }
 
-
 void showDrivesStatus(HANDLE keyHandle) {
 	static vector<string> headers = { "enc(rev)","cmd(rev)" };
 	static vector<double> p0(NUM_AXES);
@@ -403,6 +409,39 @@ void showDrivesStatus(HANDLE keyHandle) {
 		enc[i] = getActualPosition(keyHandle, 1 + i) / scld[i];
 	}
 	displayMotion(headers, enc, cmd);
+}
+/****************************************************************************/
+
+
+/****************************************************************************/
+/*	cross platform 														*/
+
+char getch() {
+    char buf = 0;
+    struct termios old = {0};
+    if (tcgetattr(STDIN_FILENO, &old) < 0)
+        perror("tcsetattr()");
+    struct termios new_settings = old;
+    new_settings.c_lflag &= (~ICANON & ~ECHO);
+    new_settings.c_cc[VMIN] = 1;
+    new_settings.c_cc[VTIME] = 0;
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &new_settings) < 0)
+        perror("tcsetattr()");
+    if (read(STDIN_FILENO, &buf, 1) < 0)
+        perror ("read()");
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &old) < 0)
+        perror("tcsetattr()");
+    return buf;
+}
+bool kbhit() {
+    struct timeval tv;
+    fd_set fds;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+    return FD_ISSET(STDIN_FILENO, &fds);
 }
 /****************************************************************************/
 
@@ -635,7 +674,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 				sleep(1);
 			}
 
-			long finalPos = 0;
+			int finalPos = 0;
 			if (VCS_GetPositionIs(p_DeviceHandle, p_usNodeId, &finalPos, &p_rlErrorCode) ) {
 				std::stringstream msg;
 				msg << "final position = " << finalPos << ", node = " << p_usNodeId;
@@ -903,8 +942,8 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
 
 		// Get character input without echoing to the console
 		int ch = -1;
-		if (_kbhit()){
-			ch = _getch();
+		if (kbhit()){
+			ch = getch();
 			update = true;
 		}
 
@@ -1022,7 +1061,9 @@ int main(int argc, char** argv) {
 				}
 			}
 			
-			#pragma region map menu string to action
+			#ifdef _MSC_VER // Check if it's Microsoft Visual C++
+            #pragma region map-menu-string-to-action
+            #endif
 			bool done = false;
 			std::vector<std::string> actions = {
 				"disable/enable drive"	   ,
@@ -1162,7 +1203,11 @@ int main(int argc, char** argv) {
 				}
 			  },
 			};
+
+            #ifdef _MSC_VER // Check if it's Microsoft Visual C++
 			#pragma endregion
+            #endif
+
 			int actionSelection = 0;
 			while (!done) {
 				std::string selectedAction = selectMenu(

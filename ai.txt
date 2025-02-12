@@ -1,25 +1,24 @@
-For the Makefile bellow, I get error:  *** No rule to make target 'obj/CatheterRobot.o', needed by 'cathRobot'.  Stop.
+For the Makefile bellow, how do I add  include directory ./SDL2/include
 
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -g # Example flags
-LDFLAGS = -lpugixml
-TARGET = cathRobot
+CXXFLAGS = -std=c++17 -Wall -g -pthread -I./SDL2/include  # Added -I./SDL2/include
+LDFLAGS = -lEposCmd -lpugixml -lrt -lcanopen # Added -lrt for real-time and -lcanopen
+TARGET = epos-hello
 OBJDIR = obj
 SRCDIR = .
 
-SOURCES = $(SRCDIR)/CatheterRobot.cpp $(SRCDIR)/JodoApplication.cpp $(SRCDIR)/JodoCanopenMotion.cpp $(SRCDIR)/PLC.cpp $(SRCDIR)/pugixml.cpp $(SRCDIR)/RecipeRead.cpp $(SRCDIR)/Scaling.cpp $(SRCDIR)/TeachData.cpp $(SRCDIR)/testgamecontroller.cpp $(SRCDIR)/testutils.cpp
+SOURCES = $(SRCDIR)/CatheterRobot.cpp $(SRCDIR)/JodoApplication.cpp $(SRCDIR)/JodoCanopenMotion.cpp $(SRCDIR)/PLC.cpp $(SRCDIR)/RecipeRead.cpp $(SRCDIR)/Scaling.cpp $(SRCDIR)/TeachData.cpp $(SRCDIR)/testgamecontroller.cpp $(SRCDIR)/testutils.cpp
 OBJECTS = $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
 
 $(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) -o $(TARGET)  # <--- TAB HERE
+	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) -o $(TARGET)
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(SRCDIR)/%.h
-	@mkdir -p $(OBJDIR) # Make the directory if it doesn't exist # <--- TAB HERE
-	$(CXX) $(CXXFLAGS) -c $< -o $@ # <--- TAB HERE
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+	@mkdir -p $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET) $(OBJDIR)/*.o # <--- TAB HERE
-
+	rm -f $(TARGET) $(OBJDIR)/*.o
 
 git config --global user.name "phdinspd"
 git config --global user.email chaver.yadim@gmail.com
