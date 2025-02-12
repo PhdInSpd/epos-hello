@@ -19,3 +19,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp $(SRCDIR)/%.h
 
 clean:
 	rm -f $(TARGET) $(OBJDIR)/*.o # <--- TAB HERE
+
+
+git config --global user.name "phdinspd"
+git config --global user.email chaver.yadim@gmail.com
