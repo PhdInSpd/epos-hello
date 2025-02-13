@@ -459,27 +459,57 @@ void clearScreen()
     system("cls");
 #endif
 }
-#ifdef __linux__
-char _getch()
+
+int getch_crossplatform()
 {
-    return getchar();
-    // char buf = 0;
-    // struct termios old = {0};
-    // if (tcgetattr(STDIN_FILENO, &old) < 0)
-    //     perror("tcsetattr()");
-    // struct termios new_settings = old;
-    // new_settings.c_lflag &= (~ICANON & ~ECHO);
-    // new_settings.c_cc[VMIN] = 1;
-    // new_settings.c_cc[VTIME] = 0;
-    // if (tcsetattr(STDIN_FILENO, TCSANOW, &new_settings) < 0)
-    //     perror("tcsetattr()");
-    // if (read(STDIN_FILENO, &buf, 1) < 0)
-    //     perror("read()");
-    // if (tcsetattr(STDIN_FILENO, TCSANOW, &old) < 0)
-    //     perror("tcsetattr()");
-    // return buf;
+#ifdef _WIN32
+    int ch = _getch();
+    if (ch == 0 || ch == 224)
+    {                              // Extended key
+        return ch << 8 | _getch(); // Combine the two codes
+    }
+    return ch;
+#else // Linux
+    int ch;
+    struct termios oldt, newt;
+
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    newt.c_cc[VMIN] = 0;
+    newt.c_cc[VTIME] = 1; // Set a small timeout (0.1 seconds)
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 100000; // 0.1 second timeout
+
+    int retval = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+
+    if (retval == -1)
+    {
+        perror("select()");
+        ch = -1;
+    }
+    else if (retval > 0)
+    {
+        ch = getchar();
+    }
+    else
+    {
+        ch = -1; // No key pressed or timeout
+    }
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return ch;
+#endif
 }
 
+#ifdef __linux__
 bool _kbhit()
 {
     int ch;
@@ -1086,7 +1116,55 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
         int ch = -1;
         if (_kbhit())
         {
-            ch = _getch();
+            ch = getch_crossplatform();
+#ifdef _WIN32
+            if (ch == 224 * 256 + 72)
+            { // Up arrow (Windows)
+                ch = 72;
+            }
+            else if (ch == 224 * 256 + 80)
+            { // down arrow (Windows)
+                ch = 80;
+            }
+            else
+            {
+                // regular char
+            }
+#else
+            if (ch == '\033')
+            { // Escape sequence (often for special keys)
+                int nextKey = getch_crossplatform();
+                for (size_t i = 0; i < 11; i++)
+                {
+                    if (nextKey != -1)
+                    {
+                        break;
+                    }
+                    nextKey = getch_crossplatform();
+
+                    /* code */
+                }
+
+                if (nextKey == '[')
+                {
+                    int finalKey = getch_crossplatform();
+                    switch (finalKey)
+                    {
+                    case 'A':
+                        // Up arrow (Linux)
+                        ch = 72;
+                        break;
+                    case 'B':
+                        // Down arrow (Linux)
+                        ch = 80;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+
+#endif
             update = true;
         }
 
@@ -1103,7 +1181,7 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
         }
         if (ftEnter.CLK(gameControllerGetButton(SDL_CONTROLLER_BUTTON_A)))
         {
-            ch = 13;
+            ch = 10;
             update = true;
         }
 
@@ -1115,7 +1193,7 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
         case 80: // Down arrow key
             selectedOption = (selectedOption + 1) % menuOptions.size();
             break;
-        case 13: // Enter key
+        case 10: // Enter key
             return menuOptions[selectedOption];
         }
         this_thread::sleep_for(std::chrono::milliseconds((2)));
