@@ -26,7 +26,7 @@
 
 #define SDL_bool bool
 
-#ifdef SDL_JOYSTICK_DISABLED
+//#ifdef SDL_JOYSTICK_DISABLED
 
 #define SCREEN_WIDTH 512
 #define SCREEN_HEIGHT 320
@@ -1125,14 +1125,14 @@ bool initializeGamecontroller()
     return true;
 }
 
-#else
-
-int main(int argc, char *argv[])
-{
-    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL compiled without Joystick support.\n");
-    return 1;
-}
-
-#endif
+//#else
+//
+//int main(int argc, char *argv[])
+//{
+//    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL compiled without Joystick support.\n");
+//    return 1;
+//}
+//
+//#endif
 
 /* vi: set ts=4 sw=4 expandtab: */
