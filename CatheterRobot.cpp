@@ -1193,7 +1193,9 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
         case 80: // Down arrow key
             selectedOption = (selectedOption + 1) % menuOptions.size();
             break;
-        case 10: // Enter key
+        case 10: // Enter key linux
+            return menuOptions[selectedOption];
+        case 13: // Enter key win32
             return menuOptions[selectedOption];
         }
         this_thread::sleep_for(std::chrono::milliseconds((2)));
