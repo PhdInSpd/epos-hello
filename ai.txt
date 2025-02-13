@@ -1,24 +1,9 @@
-For the Makefile bellow, how do I add  include directory ./SDL2/include
-
-CXX = g++
-CXXFLAGS = -std=c++17 -Wall -g -pthread -I./SDL2/include  # Added -I./SDL2/include
-LDFLAGS = -lEposCmd -lpugixml -lrt -lcanopen # Added -lrt for real-time and -lcanopen
-TARGET = epos-hello
-OBJDIR = obj
-SRCDIR = .
-
-SOURCES = $(SRCDIR)/CatheterRobot.cpp $(SRCDIR)/JodoApplication.cpp $(SRCDIR)/JodoCanopenMotion.cpp $(SRCDIR)/PLC.cpp $(SRCDIR)/RecipeRead.cpp $(SRCDIR)/Scaling.cpp $(SRCDIR)/TeachData.cpp $(SRCDIR)/testgamecontroller.cpp $(SRCDIR)/testutils.cpp
-OBJECTS = $(SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
-
-$(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) $(OBJECTS) $(LDFLAGS) -o $(TARGET)
-
-$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
-	@mkdir -p $(OBJDIR)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-clean:
-	rm -f $(TARGET) $(OBJDIR)/*.o
-
-git config --global user.name "phdinspd"
-git config --global user.email chaver.yadim@gmail.com
+when I make project
+    https://github.com/PhdInSpd/epos-hello
+I get error: 
+g++ -std=c++17 -Wall -g -pthread -I./SDL2/include   -DDEBUG_MODE=1 -DEXPORT_DLL    -lEposCmd -lpugixml -o cather-robot
+/usr/bin/ld: /usr/lib/gcc/aarch64-linux-gnu/11/../../../aarch64-linux-gnu/Scrt1.o: in function `_start':
+(.text+0x1c): undefined reference to `main'
+/usr/bin/ld: (.text+0x20): undefined reference to `main'
+collect2: error: ld returned 1 exit status
+make: *** [Makefile:20: cather-robot] Error 1
