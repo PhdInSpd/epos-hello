@@ -8,6 +8,7 @@
 #include <iostream>
 #include <limits>
 #include <chrono>
+#include <thread> // For sleep_for
 #include <string.h>
 #include <sstream>
 
@@ -202,7 +203,7 @@ JoyRsp runEnableMode(HANDLE pDevice,
             }
         }
 
-        sleep(16); // 60 updates/sec
+        this_thread::sleep_for(std::chrono::milliseconds((16))); // 60 updates/sec
     }
     return rsp;
 }
@@ -450,36 +451,77 @@ void showDrivesStatus(HANDLE keyHandle)
 
 /****************************************************************************/
 /*	cross platform 														*/
-
+void clearScreen()
+{
+#ifdef __linux__
+    system("clear");
+#else
+    system("cls");
+#endif
+}
 #ifdef __linux__
 char _getch()
 {
-    char buf = 0;
-    struct termios old = {0};
-    if (tcgetattr(STDIN_FILENO, &old) < 0)
-        perror("tcsetattr()");
-    struct termios new_settings = old;
-    new_settings.c_lflag &= (~ICANON & ~ECHO);
-    new_settings.c_cc[VMIN] = 1;
-    new_settings.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &new_settings) < 0)
-        perror("tcsetattr()");
-    if (read(STDIN_FILENO, &buf, 1) < 0)
-        perror("read()");
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &old) < 0)
-        perror("tcsetattr()");
-    return buf;
+    return getchar();
+    // char buf = 0;
+    // struct termios old = {0};
+    // if (tcgetattr(STDIN_FILENO, &old) < 0)
+    //     perror("tcsetattr()");
+    // struct termios new_settings = old;
+    // new_settings.c_lflag &= (~ICANON & ~ECHO);
+    // new_settings.c_cc[VMIN] = 1;
+    // new_settings.c_cc[VTIME] = 0;
+    // if (tcsetattr(STDIN_FILENO, TCSANOW, &new_settings) < 0)
+    //     perror("tcsetattr()");
+    // if (read(STDIN_FILENO, &buf, 1) < 0)
+    //     perror("read()");
+    // if (tcsetattr(STDIN_FILENO, TCSANOW, &old) < 0)
+    //     perror("tcsetattr()");
+    // return buf;
 }
+
 bool _kbhit()
 {
-    struct timeval tv;
+    int ch;
+    struct termios oldt, newt;
+
+    // Get current terminal settings
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+
+    // Set terminal to non-canonical mode, no echo, minimum 0 characters to read
+    newt.c_lflag &= ~(ICANON | ECHO);
+    newt.c_cc[VMIN] = 0;
+    newt.c_cc[VTIME] = 1; // Set timeout to 0.1 seconds
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    // Use select() to check for input without blocking
     fd_set fds;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
-    select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
-    return FD_ISSET(STDIN_FILENO, &fds);
+    struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 100000; // 0.1 second timeout
+
+    int retval = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+
+    // Restore original terminal settings
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+
+    if (retval == -1)
+    {
+        perror("select()"); // Handle error
+        return false;
+    }
+    else if (retval > 0)
+    {
+        return true; // Key was pressed
+    }
+    else
+    {
+        return false; // No key was pressed within timeout
+    }
 }
 #endif
 
@@ -742,7 +784,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
                 std::stringstream msg;
                 msg << "cmd position = " << cmdPos << ", node = " << p_usNodeId;
                 LogInfo(msg.str());
-                sleep(1);
+                this_thread::sleep_for(std::chrono::milliseconds((1)));
             }
 
 #ifdef __linux__
@@ -758,7 +800,7 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
                 LogInfo(msg.str());
             }
 
-            sleep(1);
+            std::this_thread::sleep_for(std::chrono::milliseconds((1)));
         }
 
         if (lResult == MMC_SUCCESS)
@@ -1015,7 +1057,8 @@ int PrintAvailableProtocols()
 
 void showRnDMenu()
 {
-    system("cls");
+    clearScreen();
+
     std::cout << "1] disable/enable drive\r\n"
                  "2] Manually home unit\r\n"
                  "3] joystick jog.\r\n"
@@ -1075,7 +1118,7 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
         case 13: // Enter key
             return menuOptions[selectedOption];
         }
-        sleep(2);
+        this_thread::sleep_for(std::chrono::milliseconds((2)));
     }
 }
 
@@ -1083,7 +1126,7 @@ void showMenu(const std::string &header, const std::vector<std::string> &menuOpt
 {
 
     // Clear the console (Windows-specific)
-    system("cls");
+    clearScreen();
     // setTextPosition(0, 1);
 
     // Display the menu with highlighting
@@ -1143,6 +1186,11 @@ int main(int argc, char **argv)
         return 1;
     }
     int recipeSelection = 0;
+    std::string selectedRecipe = selectMenu(
+        "\nuse arrow key to select recipe\n"
+        "press enter for final selection :\n",
+        recipeSelection,
+        recipes);
 
     PrintHeader();
 
@@ -1192,7 +1240,7 @@ int main(int argc, char **argv)
         std::map<std::string, std::function<void()>> menuActions = {
             {actions[0], [&errorCode]()
              {
-                 system("cls");
+                 clearScreen();
                  JoyRsp rsp = runEnableMode(g_pKeyHandle,
                                             "Enable/DisabLe left(1) right(2) down(3) up(4) share(5) option(6)",
                                             errorCode);
@@ -1204,7 +1252,7 @@ int main(int argc, char **argv)
              }},
             {actions[1], [&errorCode]()
              {
-                 system("cls");
+                 clearScreen();
                  for (size_t i = 0; i < NUM_AXES; i++)
                  {
                      JoyRsp rsp = runHomeMode(g_pKeyHandle,
@@ -1226,7 +1274,7 @@ int main(int argc, char **argv)
              }},
             {actions[2], [&errorCode]()
              {
-                 system("cls");
+                 clearScreen();
                  std::vector<bool> joyEnable(NUM_AXES, true);
                  JoyRsp rsp = runJoystickMode(g_pKeyHandle,
                                               joyEnable,
@@ -1241,7 +1289,7 @@ int main(int argc, char **argv)
              }},
             {actions[3], [&errorCode, &recipes, &g_recipeDir]()
              {
-                 system("cls");
+                 clearScreen();
                  std::string filename;
                  std::cout << "enter teach file name\n";
                  std::cin >> filename;
@@ -1326,7 +1374,7 @@ int main(int argc, char **argv)
              }},
             {actions[6], [&done]()
              {
-                 system("cls");
+                 clearScreen();
                  done = true;
              }},
         };
