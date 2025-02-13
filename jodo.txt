@@ -1,1 +1,9 @@
+sudo apt update  # Update the package list
+sudo apt install libsdl2-dev
+
 sudo apt install libpugixml-dev
+
+tar -xzf SDL2-2.30.11.tar.gz
+https://gemini.google.com/app/d87b1c4683dd616d?is_sa=1&is_sa=1&android-min-version=301356232&ios-min-version=322.0&campaign_id=bkws&utm_source=sem&utm_source=google&utm_medium=paid-media&utm_medium=cpc&utm_campaign=bkws&utm_campaign=2024enUS_gemfeb&pt=9008&mt=8&ct=p-growth-sem-bkws&gad_source=1&gclid=CjwKCAiA2JG9BhAuEiwAH_zf3vH6uj6Z0dz4ubNjTEDUzdLw1hsSD1n6ysztckQ71iOiSBWmEcAcABoCRH4QAvD_BwE&gclsrc=aw.ds
+
+export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/lib/pkgconfig/sdl2.pc
