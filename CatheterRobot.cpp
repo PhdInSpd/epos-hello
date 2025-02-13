@@ -11,10 +11,16 @@
 #include <string.h>
 #include <sstream>
 
-// #include <conio.h>
-#include <sys/select.h>
-#include <termios.h>
-#include <unistd.h>
+//
+
+#ifdef __linux__
+	// call when linux
+	#include <sys/select.h>
+	#include <termios.h>
+	#include <unistd.h>
+#elif _WIN32 || _WIN64
+	#include <conio.h>
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -31,9 +37,9 @@
 //#include <sys/time.h>
 #include <functional>
 
+#include "xplatform.h"
 #ifdef __linux__
     #include "linux/Definitions.h"
-    #include "xplatform.h"
 #elif _WIN32 || _WIN64
     #include "win32/Definitions.h"
 #endif
@@ -230,11 +236,14 @@ JoyRsp forceHome( HANDLE pDevice, int axis, DWORD& rErrorCode)	{
 	DWORD	acceleration,
 		speedSwitch,
 		speedIndex;
-
+#ifdef __linux__
 	int homeOffset;
-
-	WORD	currentThreshold;
 	int homePos;
+#else
+	long homeOffset;
+	long homePos;
+#endif 
+	WORD	currentThreshold;
 
 
 	if (!VCS_GetHomingParameter(pDevice, 1 + axis,
@@ -400,6 +409,7 @@ void showDrivesStatus(HANDLE keyHandle) {
 	static vector<string> headers = { "enc(rev)","cmd(rev)" };
 	static vector<double> p0(NUM_AXES);
 	static vector<double> p1(NUM_AXES);
+	double start = SEC_TIME();
 	std::vector<double> cmd(NUM_AXES);
 	for (size_t i = 0; i < NUM_AXES; i++) {
 		cmd[i] = getCommandPosition(keyHandle, 1 + i) / scld[i];
@@ -408,6 +418,9 @@ void showDrivesStatus(HANDLE keyHandle) {
 	for (size_t i = 0; i < NUM_AXES; i++) {
 		enc[i] = getActualPosition(keyHandle, 1 + i) / scld[i];
 	}
+	double end = SEC_TIME();
+	//.7ms per command
+	double delaySec = end - start;
 	displayMotion(headers, enc, cmd);
 }
 /****************************************************************************/
@@ -416,33 +429,36 @@ void showDrivesStatus(HANDLE keyHandle) {
 /****************************************************************************/
 /*	cross platform 														*/
 
-char getch() {
-    char buf = 0;
-    struct termios old = {0};
-    if (tcgetattr(STDIN_FILENO, &old) < 0)
-        perror("tcsetattr()");
-    struct termios new_settings = old;
-    new_settings.c_lflag &= (~ICANON & ~ECHO);
-    new_settings.c_cc[VMIN] = 1;
-    new_settings.c_cc[VTIME] = 0;
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &new_settings) < 0)
-        perror("tcsetattr()");
-    if (read(STDIN_FILENO, &buf, 1) < 0)
-        perror ("read()");
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &old) < 0)
-        perror("tcsetattr()");
-    return buf;
+#ifdef __linux__
+char _getch() {
+	char buf = 0;
+	struct termios old = { 0 };
+	if (tcgetattr(STDIN_FILENO, &old) < 0)
+		perror("tcsetattr()");
+	struct termios new_settings = old;
+	new_settings.c_lflag &= (~ICANON & ~ECHO);
+	new_settings.c_cc[VMIN] = 1;
+	new_settings.c_cc[VTIME] = 0;
+	if (tcsetattr(STDIN_FILENO, TCSANOW, &new_settings) < 0)
+		perror("tcsetattr()");
+	if (read(STDIN_FILENO, &buf, 1) < 0)
+		perror("read()");
+	if (tcsetattr(STDIN_FILENO, TCSANOW, &old) < 0)
+		perror("tcsetattr()");
+	return buf;
 }
-bool kbhit() {
-    struct timeval tv;
-    fd_set fds;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-    FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
-    return FD_ISSET(STDIN_FILENO, &fds);
+bool _kbhit() {
+	struct timeval tv;
+	fd_set fds;
+	tv.tv_sec = 0;
+	tv.tv_usec = 0;
+	FD_ZERO(&fds);
+	FD_SET(STDIN_FILENO, &fds);
+	select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+	return FD_ISSET(STDIN_FILENO, &fds);
 }
+#endif
+
 /****************************************************************************/
 
 void PrintUsage() {
@@ -491,6 +507,13 @@ void SetDefaultParameters() {
 	g_interfaceName = "USB"; 
 	g_portName = "USB0"; 
 	g_baudrate = 1000000; 
+
+	g_usNodeId = 1;
+	g_deviceName = "EPOS4";
+	g_protocolStackName = "CANopen";
+	g_interfaceName = "IXXAT_USB-to-CAN V2 compact 0";
+	g_portName = "CAN0";
+	g_baudrate = 1000000;
 }
 
 int OpenDevice(DWORD* pErrorCode) {
@@ -535,6 +558,9 @@ int OpenDevice(DWORD* pErrorCode) {
 	if (g_baudrate != (int)lBaudrate) {
 		return success;
 	}
+success = true;
+return success;
+
 	subkeyHandle = VCS_OpenSubDevice(	g_pKeyHandle,
 										(char*)subdeviceName.c_str(),
 										(char*)subprotocolStackName.c_str(),
@@ -674,7 +700,12 @@ int DemoProfilePositionMode(HANDLE p_DeviceHandle, unsigned short p_usNodeId, DW
 				sleep(1);
 			}
 
+#ifdef __linux__
 			int finalPos = 0;
+#else
+			long finalPos = 0;
+#endif 
+			
 			if (VCS_GetPositionIs(p_DeviceHandle, p_usNodeId, &finalPos, &p_rlErrorCode) ) {
 				std::stringstream msg;
 				msg << "final position = " << finalPos << ", node = " << p_usNodeId;
@@ -704,7 +735,7 @@ bool clearFaultsAndEnable(DWORD* pErrorCode, WORD nodeId) {
 	bool success = true;
 	BOOL oIsFault = 0;
 
-	if(!VCS_GetFaultState(subkeyHandle, nodeId, &oIsFault, pErrorCode ) ) {
+	if(!VCS_GetFaultState(g_pKeyHandle, nodeId, &oIsFault, pErrorCode ) ) {
 		LogError("VCS_GetFaultState", success, *pErrorCode);
 		success = false;
 		return success;
@@ -715,7 +746,7 @@ bool clearFaultsAndEnable(DWORD* pErrorCode, WORD nodeId) {
 		msg << "clear fault, node = '" << nodeId << "'";
 		LogInfo(msg.str());
 
-		if(!VCS_ClearFault(subkeyHandle, nodeId, pErrorCode) ) {
+		if(!VCS_ClearFault(g_pKeyHandle, nodeId, pErrorCode) ) {
 			LogError("VCS_ClearFault", success, *pErrorCode);
 			success = false;
 			return success;
@@ -723,14 +754,14 @@ bool clearFaultsAndEnable(DWORD* pErrorCode, WORD nodeId) {
 	}
 
 	BOOL oIsEnabled = 0;
-	if(!VCS_GetEnableState(subkeyHandle, nodeId, &oIsEnabled, pErrorCode) ) {
+	if(!VCS_GetEnableState(g_pKeyHandle, nodeId, &oIsEnabled, pErrorCode) ) {
 		LogError("VCS_GetEnableState", success, *pErrorCode);
 		success = false;
 		return success;
 	}
 
 	if(!oIsEnabled) {
-		if(VCS_SetEnableState(subkeyHandle, nodeId, pErrorCode) == 0) {
+		if(VCS_SetEnableState(g_pKeyHandle, nodeId, pErrorCode) == 0) {
 			LogError("VCS_SetEnableState", success, *pErrorCode);
 			success = false;
 		}
@@ -942,8 +973,8 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
 
 		// Get character input without echoing to the console
 		int ch = -1;
-		if (kbhit()){
-			ch = getch();
+		if (_kbhit()){
+			ch = _getch();
 			update = true;
 		}
 
@@ -1077,7 +1108,7 @@ int main(int argc, char** argv) {
 			std::map<std::string, std::function<void()>> menuActions = {
 			  {actions[0], [&errorCode]() {
 					system("cls");
-					JoyRsp rsp = runEnableMode(subkeyHandle,
+					JoyRsp rsp = runEnableMode(g_pKeyHandle,
 						"Enable/DisabLe left(1) right(2) down(3) up(4) share(5) option(6)",
 						errorCode);
 
@@ -1089,7 +1120,7 @@ int main(int argc, char** argv) {
 			  {actions[1], [ &errorCode]() {
 					system("cls");
 					for (size_t i = 0; i < NUM_AXES; i++) {
-						JoyRsp rsp = runHomeMode(subkeyHandle,
+						JoyRsp rsp = runHomeMode(g_pKeyHandle,
 							"Jog to position and home(A) or skip(B)",
 							i,
 							errorCode);
@@ -1099,7 +1130,7 @@ int main(int argc, char** argv) {
 					}
 
 					long finalPos[NUM_AXES] = { 0 };
-					getActualPositionDrives(subkeyHandle, finalPos);
+					getActualPositionDrives(g_pKeyHandle, finalPos);
 					double finalPosUserUnits[NUM_AXES] = { 0 };
 					scalePosition(finalPos, finalPosUserUnits);
 					printPosition("finalPos= ", finalPos);
@@ -1109,7 +1140,7 @@ int main(int argc, char** argv) {
 			  {actions[2], [ &errorCode]() {
 					system("cls");
 					std::vector<bool> joyEnable( NUM_AXES,true);
-					JoyRsp rsp = runJoystickMode(subkeyHandle,
+					JoyRsp rsp = runJoystickMode(g_pKeyHandle,
 													joyEnable,
 													"accept(A) or reject(B)",
 													errorCode,
@@ -1136,7 +1167,7 @@ int main(int argc, char** argv) {
 					teach.pathAcceleration = 20;
 					const double defaultPathVel = 0.5;
 
-					if (!jodoTeach(subkeyHandle, teach, defaultPathVel, &errorCode)) {
+					if (!jodoTeach(g_pKeyHandle, teach, defaultPathVel, &errorCode)) {
 						LogError("jodoTeach", false, errorCode);
 						return;
 					}
@@ -1157,7 +1188,7 @@ int main(int argc, char** argv) {
 									"press enter for final selection :\n",
 									recipeSelection,
 									recipes);
-					if (!jodoPathDemo(subkeyHandle, selectedRecipe, &errorCode)) {
+					if (!jodoPathDemo(g_pKeyHandle, selectedRecipe, &errorCode)) {
 						LogError("jodoPathDemo", false, errorCode);
 					}
 				}
@@ -1175,7 +1206,7 @@ int main(int argc, char** argv) {
 					}
 
 					TeachData copy;
-					bool success = jodoJogCatheterPath(subkeyHandle,
+					bool success = jodoJogCatheterPath(g_pKeyHandle,
 													data,
 													copy,
 													showDrivesStatus,
@@ -1185,7 +1216,7 @@ int main(int argc, char** argv) {
 						return;
 					}
 
-					haltPositionMovementDrives(subkeyHandle, &errorCode);
+					haltPositionMovementDrives(g_pKeyHandle, &errorCode);
 					if (yesNoUpdateProfile() == "yes" ) {
 						copy.name = data.name;
 						copy.pathAcceleration = data.pathAcceleration;

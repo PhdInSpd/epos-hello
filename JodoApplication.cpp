@@ -617,6 +617,8 @@ bool jodoJogCatheterPath(HANDLE pDevice,
 		for (size_t i = 0; i < NUM_AXES; i++) {
 			moveRel(pDevice, 1 + i);
 		}
+		// 0x2200 0001 CAN receive frame error Error while receiving CAN frame
+		//moveRel(pDevice, 0);
 		end = SEC_TIME();
 		elapsed = end - start;
 		#pragma endregion
