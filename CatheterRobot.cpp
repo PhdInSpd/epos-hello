@@ -1325,9 +1325,7 @@ int main(int argc, char **argv)
             }
         }
 
-#ifdef _MSC_VER // Check if it's Microsoft Visual C++
-#pragma region map-menu-string-to-action
-#endif
+        // region map-menu-string-to-action
         bool done = false;
         std::vector<std::string> actions = {
             "disable/enable drive",
@@ -1480,9 +1478,7 @@ int main(int argc, char **argv)
              }},
         };
 
-#ifdef _MSC_VER // Check if it's Microsoft Visual C++
-#pragma endregion
-#endif
+        // endregion
 
         int actionSelection = 0;
         while (!done)

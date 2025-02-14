@@ -354,7 +354,7 @@ bool jodoContinuousCatheterPath(HANDLE pDevice,
     int noPoints = data.points.size();
     for (size_t point = 0; point < noPoints; point++)
     {
-#pragma region calculate segment i profile to make line
+        // region calculate segment i profile to make line
 
         std::vector<double> startPos(NUM_AXES);
         for (size_t i = 0; i < NUM_AXES; i++)
@@ -447,7 +447,7 @@ bool jodoContinuousCatheterPath(HANDLE pDevice,
             profileAcceleration[i] = fabs((double)(data.pathAcceleration * scla[i] * unitDirection[i]));
             profileDeceleration[i] = fabs((double)(data.pathAcceleration * scla[i] * unitDirection[i]));
         }
-#pragma endregion
+        // endregion
 
         // set line profile
         for (size_t i = 0; i < NUM_AXES; i++)
@@ -626,7 +626,7 @@ bool jodoJogCatheterPath(HANDLE pDevice,
             return success;
         }
 
-#pragma region calculate segment i profile to make line
+        // region calculate segment i profile to make line
         std::vector<double> startPos(NUM_AXES);
         for (size_t i = 0; i < NUM_AXES; i++)
         {
@@ -681,9 +681,9 @@ bool jodoJogCatheterPath(HANDLE pDevice,
             profileAcceleration[i] = fabs((double)(data.pathAcceleration * scla[i] * unitDirection[i]));
             profileDeceleration[i] = fabs((double)(data.pathAcceleration * scla[i] * unitDirection[i]));
         }
-#pragma endregion
+        // endregion
 
-#pragma region set line profile
+        // region set line profile
         for (size_t i = 0; i < NUM_AXES; i++)
         {
             if (!VCS_SetPositionProfile(pDevice,
@@ -699,17 +699,17 @@ bool jodoJogCatheterPath(HANDLE pDevice,
                 return success;
             }
         }
-#pragma endregion
+        // endregion
 
-#pragma region set target position
+        // region set target position
         // set relative move
         for (size_t i = 0; i < NUM_AXES; i++)
         {
             setTargetPosition(pDevice, 1 + i, delta[i] * scld[i]);
         }
-#pragma endregion
+        // endregion
 
-#pragma region init motion
+        // region init motion
         // time measurement
         double start = 0;
         double end = 0;
@@ -724,16 +724,16 @@ bool jodoJogCatheterPath(HANDLE pDevice,
         // moveRel(pDevice, 0);
         end = SEC_TIME();
         elapsed = end - start;
-#pragma endregion
+        // endregion
 
-#pragma region move reset
+        // region move reset
         for (size_t i = 0; i < NUM_AXES; i++)
         {
             moveReset(pDevice, 1 + i);
         }
-#pragma endregion
+        // endregion
 
-#pragma region wait move done
+        // region wait move done
         bool targetsReached = true;
         do
         {
@@ -759,18 +759,18 @@ bool jodoJogCatheterPath(HANDLE pDevice,
             }
             this_thread::sleep_for(std::chrono::milliseconds((1)));
         } while (!targetsReached);
-#pragma endregion
+        // endregion
 
-#pragma region print final position
+        // region print final position
         long finalPos[NUM_AXES] = {0};
         getActualPositionDrives(pDevice, finalPos);
         double finalPosUserUnits[NUM_AXES] = {0};
         scalePosition(finalPos, finalPosUserUnits);
         printPosition("finalPosUI= ", finalPosUserUnits);
         printPosition("finalPos= ", finalPos);
-#pragma endregion
+        // endregion
 
-#pragma region adjustment
+        // region adjustment
         std::vector<bool> joyEnable(NUM_AXES, true);
         JoyRsp rsp = runJoystickMode(pDevice,
                                      joyEnable,
@@ -820,7 +820,7 @@ bool jodoJogCatheterPath(HANDLE pDevice,
             success = false;
             return success;
         }
-#pragma endregion
+        // endregion
     }
 
     return success;
