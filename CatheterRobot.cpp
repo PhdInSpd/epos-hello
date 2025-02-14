@@ -460,56 +460,102 @@ void clearScreen()
 #endif
 }
 
-int getch_crossplatform()
+// int getch_crossplatform()
+// {
+// #ifdef _WIN32
+//     int ch = _getch();
+//     if (ch == 0 || ch == 224)
+//     {                              // Extended key
+//         return ch << 8 | _getch(); // Combine the two codes
+//     }
+//     return ch;
+// #else // Linux
+//     int ch;
+//     struct termios oldt, newt;
+
+//     tcgetattr(STDIN_FILENO, &oldt);
+//     newt = oldt;
+//     newt.c_lflag &= ~(ICANON | ECHO);
+//     newt.c_cc[VMIN] = 0;
+//     newt.c_cc[VTIME] = 1; // Set a small timeout (in .1 seconds)
+
+//     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+//     fd_set fds;
+//     FD_ZERO(&fds);
+//     FD_SET(STDIN_FILENO, &fds);
+//     struct timeval tv;
+//     tv.tv_sec = 0;
+//     tv.tv_usec = 100000; // micro second timeout
+
+//     int retval = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
+
+//     if (retval == -1)
+//     {
+//         perror("select()");
+//         ch = -1;
+//     }
+//     else if (retval > 0)
+//     {
+//         ch = getchar();
+//     }
+//     else
+//     {
+//         ch = -1; // No key pressed or timeout
+//     }
+
+//     tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+//     return ch;
+// #endif
+// }
+
+#ifdef __linux__
+static struct termios old, current;
+
+/* Initialize new terminal i/o settings */
+void initTermios(int echo)
 {
-#ifdef _WIN32
-    int ch = _getch();
-    if (ch == 0 || ch == 224)
-    {                              // Extended key
-        return ch << 8 | _getch(); // Combine the two codes
-    }
-    return ch;
-#else // Linux
-    int ch;
-    struct termios oldt, newt;
-
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ICANON | ECHO);
-    newt.c_cc[VMIN] = 0;
-    newt.c_cc[VTIME] = 1; // Set a small timeout (0.1 seconds)
-
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 100000; // 0.1 second timeout
-
-    int retval = select(STDIN_FILENO + 1, &fds, NULL, NULL, &tv);
-
-    if (retval == -1)
+    tcgetattr(0, &old);         /* grab old terminal i/o settings */
+    current = old;              /* make new settings same as old settings */
+    current.c_lflag &= ~ICANON; /* disable buffered i/o */
+    if (echo)
     {
-        perror("select()");
-        ch = -1;
-    }
-    else if (retval > 0)
-    {
-        ch = getchar();
+        current.c_lflag |= ECHO; /* set echo mode */
     }
     else
     {
-        ch = -1; // No key pressed or timeout
+        current.c_lflag &= ~ECHO; /* set no echo mode */
     }
-
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    return ch;
-#endif
+    tcsetattr(0, TCSANOW, &current); /* use these new terminal i/o settings now */
 }
 
-#ifdef __linux__
+/* Restore old terminal i/o settings */
+void resetTermios(void)
+{
+    tcsetattr(0, TCSANOW, &old);
+}
+
+/* Read 1 character - echo defines echo mode */
+char getch_(int echo)
+{
+    char ch;
+    initTermios(echo);
+    ch = getchar();
+    resetTermios();
+    return ch;
+}
+
+/* Read 1 character without echo */
+char _getch(void)
+{
+    return getch_(0);
+}
+
+/* Read 1 character with echo */
+char getche(void)
+{
+    return getch_(1);
+}
 bool _kbhit()
 {
     int ch;
@@ -1116,38 +1162,14 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
         int ch = -1;
         if (_kbhit())
         {
-            ch = getch_crossplatform();
-#ifdef _WIN32
-            if (ch == 224 * 256 + 72)
-            { // Up arrow (Windows)
-                ch = 72;
-            }
-            else if (ch == 224 * 256 + 80)
-            { // down arrow (Windows)
-                ch = 80;
-            }
-            else
-            {
-                // regular char
-            }
-#else
+            ch = _getch();
+#ifdef __linux__
             if (ch == '\033')
             { // Escape sequence (often for special keys)
-                int nextKey = getch_crossplatform();
-                for (size_t i = 0; i < 11; i++)
-                {
-                    if (nextKey != -1)
-                    {
-                        break;
-                    }
-                    nextKey = getch_crossplatform();
-
-                    /* code */
-                }
-
+                int nextKey = _getch();
                 if (nextKey == '[')
                 {
-                    int finalKey = getch_crossplatform();
+                    int finalKey = _getch();
                     switch (finalKey)
                     {
                     case 'A':
@@ -1163,12 +1185,11 @@ std::string selectMenu(std::string header, int &selectedOption, std::vector<std:
                     }
                 }
             }
-
 #endif
             update = true;
         }
 
-        // translate to keybord input
+        // translate to keyboard input
         if (ftDown.CLK(gameControllerGetButton(SDL_CONTROLLER_BUTTON_DPAD_DOWN)))
         {
             ch = 80;
