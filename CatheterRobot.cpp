@@ -428,6 +428,8 @@ bool jodoTeach(HANDLE keyHandle, TeachData &teach, double defaultPathVel, DWORD 
 
 void showDrivesStatus(HANDLE keyHandle)
 {
+    static int show = 0;
+    static double average = 0;
     static vector<string> headers = {"enc(rev)", "cmd(rev)"};
     static vector<double> p0(NUM_AXES);
     static vector<double> p1(NUM_AXES);
@@ -443,8 +445,19 @@ void showDrivesStatus(HANDLE keyHandle)
         enc[i] = getActualPosition(keyHandle, 1 + i) / scld[i];
     }
     double end = SEC_TIME();
-    //.7ms per command
+    //.7ms in win32 per command
+    // 2.33 ms in linux
     double delaySec = end - start;
+    average += delaySec;
+    show++;
+    if (show > 100)
+    {
+        average = average / (double)(show * 2 * NUM_AXES);
+        setTextPosition(100, 8);
+        cout << average;
+        average = 0;
+        show = 0;
+    }
     displayMotion(headers, enc, cmd);
 }
 /****************************************************************************/
@@ -658,7 +671,11 @@ void SetDefaultParameters()
     g_usNodeId = 1;
     g_deviceName = "EPOS4";
     g_protocolStackName = "CANopen";
+#ifdef __linux__
+    g_interfaceName = "CAN_ixx_usb 0";
+#elif
     g_interfaceName = "IXXAT_USB-to-CAN V2 compact 0";
+#endif
     g_portName = "CAN0";
     g_baudrate = 1000000;
 }
@@ -1042,8 +1059,8 @@ int PrintAvailableInterfaces()
 {
     int lResult = MMC_FAILED;
     int lStartOfSelection = 1;
-    int lMaxStrSize = 255;
-    char *pInterfaceNameSel = new char[lMaxStrSize];
+    const int lMaxStrSize = 255;
+    char pInterfaceNameSel[lMaxStrSize] = {0};
     int lEndOfSelection = 0;
     DWORD ulErrorCode = 0;
 
@@ -1074,8 +1091,6 @@ int PrintAvailableInterfaces()
     } while (lEndOfSelection == 0);
 
     SeparatorLine();
-
-    delete[] pInterfaceNameSel;
 
     return lResult;
 }
@@ -1263,6 +1278,18 @@ std::string yesNoUpdateProfile()
     return selectedAction;
 }
 
+void yawn(int ms)
+{
+    this_thread::sleep_for(std::chrono::milliseconds((ms)));
+}
+
+void hitIt()
+{
+    while (!_kbhit())
+    {
+        yawn(1);
+    }
+}
 int main(int argc, char **argv)
 {
 
@@ -1287,16 +1314,20 @@ int main(int argc, char **argv)
         return 1;
     }
     int recipeSelection = 0;
-    std::string selectedRecipe = selectMenu(
-        "\nuse arrow key to select recipe\n"
-        "press enter for final selection :\n",
-        recipeSelection,
-        recipes);
+    // std::string selectedRecipe = selectMenu(
+    //     "\nuse arrow key to select recipe\n"
+    //     "press enter for final selection :\n",
+    //     recipeSelection,
+    //     recipes);
 
     PrintHeader();
 
     SetDefaultParameters();
 
+    PrintAvailableInterfaces();
+    // hitIt();
+    PrintAvailableProtocols();
+    // hitIt();
     bool success = false;
     if (!(success = ParseArguments(argc, argv)))
     {
@@ -1491,7 +1522,7 @@ int main(int argc, char **argv)
             menuActions[selectedAction](); // Call the associated function
         }
 
-        disableDrives(subkeyHandle, &errorCode);
+        disableDrives(g_pKeyHandle, &errorCode);
 
         if (!(success = CloseDevice(&errorCode)))
         {
