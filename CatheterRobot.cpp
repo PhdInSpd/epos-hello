@@ -755,10 +755,13 @@ bool CloseDevice(DWORD *pErrorCode)
 
     *pErrorCode = 0;
 
-    LogInfo("Close subdevice");
-    if (!VCS_CloseSubDevice(subkeyHandle, pErrorCode))
+    if (subkeyHandle)
     {
-        return success;
+        LogInfo("Close subdevice");
+        if (!VCS_CloseSubDevice(subkeyHandle, pErrorCode))
+        {
+            return success;
+        }
     }
 
     LogInfo("Close device");
