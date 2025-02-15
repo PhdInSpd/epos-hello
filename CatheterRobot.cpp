@@ -673,7 +673,7 @@ void SetDefaultParameters()
     g_protocolStackName = "CANopen";
 #ifdef __linux__
     g_interfaceName = "CAN_ixx_usb 0";
-#elif
+#else
     g_interfaceName = "IXXAT_USB-to-CAN V2 compact 0";
 #endif
     g_portName = "CAN0";
