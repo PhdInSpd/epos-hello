@@ -20,5 +20,5 @@ x				-	ready to test
 x		-	display enc pos
 x			-	ready to test
 x		-	display cmd pos
-o			-	ready to test => jog shows incorrect cmdPos
-o	-	move to linux
+x			-	ready to test => jog shows incorrect cmdPos
+x	-	move to linux
