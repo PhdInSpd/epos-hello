@@ -22,3 +22,7 @@ x			-	ready to test
 x		-	display cmd pos
 x			-	ready to test => jog shows incorrect cmdPos
 x	-	move to linux
+o	-	calculate path from motor pos:
+o		–	How to Read supersonic Position
+			–	The information will come in Continuously in a CSV File
+		–	How do we convert Motor position To XYZ
