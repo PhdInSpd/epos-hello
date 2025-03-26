@@ -26,3 +26,5 @@ o	-	calculate path from motor pos:
 o		–	How to Read supersonic Position
 			–	The information will come in Continuously in a CSV File
 		–	How do we convert Motor position To XYZ
+o	-	implement new control
+		https://medtronic-my.sharepoint.com/:p:/r/personal/orthg2_medtronic_com/_layouts/15/Doc.aspx?sourcedoc=%7BCC62FEC2-34EE-4BC3-835F-47C64740479D%7D&file=Docking.pptx&fromShare=true&action=edit&mobileredirect=true
